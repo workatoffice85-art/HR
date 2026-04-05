@@ -169,6 +169,20 @@ function generateReport() {
         if(record.totalHours) empStats.totalHours += parseFloat(record.totalHours);
     });
 
+    // Calculate working days passed in the selected month
+    const now = new Date();
+    let workingDaysPassedCount = 0;
+    const endDay = (targetYear === now.getFullYear() && targetMonth === now.getMonth()) 
+                   ? now.getDate() 
+                   : new Date(targetYear, targetMonth + 1, 0).getDate();
+
+    for (let i = 1; i <= endDay; i++) {
+        const d = new Date(targetYear, targetMonth, i);
+        if (d.getDay() !== 5 && d.getDay() !== 6) { // Skip Fri/Sat
+            workingDaysPassedCount++;
+        }
+    }
+
     let kpiTotalHours = 0;
     let kpiTotalLates = 0;
     let kpiActiveEmp = Object.keys(reportAcc).length;
@@ -179,10 +193,13 @@ function generateReport() {
 
     const tbody = document.getElementById('reportsTableBody');
     tbody.innerHTML = '';
-    
-    for (const [empId, data] of Object.entries(reportAcc)) {
+
+    for (let empId in reportAcc) {
+        const data = reportAcc[empId];
         kpiTotalHours += data.totalHours;
         kpiTotalLates += data.lates;
+        
+        const absentDays = workingDaysPassedCount - data.daysPresent;
         
         names.push(data.name);
         hours.push((data.totalHours).toFixed(2));
@@ -192,12 +209,13 @@ function generateReport() {
             <tr>
                 <td>${empId}</td>
                 <td>${data.name}</td>
-                    <td>${data.daysPresent} أيام</td>
-                    <td><span style="color:${data.lates > 0 ? 'var(--danger)' : 'inherit'}">${data.lates} مرات</span></td>
-                    <td><span style="color:#3b82f6">${data.overtime || 0} أيام</span></td>
-                    <td>${data.totalHours.toFixed(2)} ساعات</td>
-                </tr>
-            `;
+                <td>${data.daysPresent} أيام</td>
+                <td><span style="color:${absentDays > 0 ? 'var(--danger)' : 'inherit'}">${absentDays > 0 ? absentDays : 0} أيام</span></td>
+                <td><span style="color:${data.lates > 0 ? 'var(--danger)' : 'inherit'}">${data.lates} مرات</span></td>
+                <td><span style="color:#3b82f6">${data.overtime || 0} أيام</span></td>
+                <td>${data.totalHours.toFixed(2)} ساعات</td>
+            </tr>
+        `;
     }
 
     document.getElementById('kpiTotalHours').innerText = kpiTotalHours.toFixed(2);
