@@ -374,9 +374,16 @@ function doPost(e) {
       }
 
       var checkInDate = new Date(data.checkIn);
-      var lateLimit = new Date(checkInDate);
-      lateLimit.setHours(9, 15, 0, 0); // 09:15 AM
-      var manualStatus = (checkInDate > lateLimit) ? "late" : "present";
+      var dayOfWeek = checkInDate.getDay();
+      var manualStatus = "present";
+
+      if (dayOfWeek === 5 || dayOfWeek === 6) {
+        manualStatus = "overtime";
+      } else {
+        var lateLimit = new Date(checkInDate);
+        lateLimit.setHours(9, 15, 0, 0); // 09:15 AM
+        manualStatus = (checkInDate > lateLimit) ? "late" : "present";
+      }
 
       sheet.appendRow([
         data.employeeId,data.employeeName,

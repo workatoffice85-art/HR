@@ -478,12 +478,23 @@ function renderMyReports(data, monthStr) {
     // 4. Render to Table
     fullReport.forEach(item => {
         if (item.type === 'entry') {
+            let statusText = 'حاضر';
+            let statusColor = 'var(--secondary)';
+            
+            if (item.status === 'late') {
+                statusText = 'متأخر';
+                statusColor = 'var(--danger)';
+            } else if (item.status === 'overtime') {
+                statusText = 'عمل إضافي';
+                statusColor = '#3b82f6'; // Bright Blue
+            }
+
             tbody.innerHTML += `
                 <tr>
                     <td style="padding:10px; border-bottom:1px solid var(--card-border)">${item.date.toLocaleDateString('ar-EG')}</td>
                     <td style="padding:10px; border-bottom:1px solid var(--card-border)" dir="ltr">${new Date(item.checkIn).toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'})}</td>
                     <td style="padding:10px; border-bottom:1px solid var(--card-border)" dir="ltr">${item.checkOut ? new Date(item.checkOut).toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'}) : '-'}</td>
-                    <td style="padding:10px; border-bottom:1px solid var(--card-border)"><span style="color:${item.status==='late'?'var(--danger)':'var(--secondary)'}">${item.status==='late'?'متأخر':'حاضر'}</span></td>
+                    <td style="padding:10px; border-bottom:1px solid var(--card-border)"><span style="color:${statusColor}">${statusText}</span></td>
                 </tr>
             `;
         } else {

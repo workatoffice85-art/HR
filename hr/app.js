@@ -95,6 +95,18 @@ function renderAttendanceTable(data) {
     [...data].reverse().forEach(record => {
         const checkInTime = new Date(record.checkIn).toLocaleString('ar-EG');
         const checkOutTime = record.checkOut ? new Date(record.checkOut).toLocaleString('ar-EG') : 'لم ينصرف بعد';
+        
+        let statusText = 'حاضر';
+        let statusColor = 'var(--secondary)';
+        
+        if (record.status === 'late') {
+            statusText = 'متأخر';
+            statusColor = 'var(--danger)';
+        } else if (record.status === 'overtime') {
+            statusText = 'عمل إضافي';
+            statusColor = '#3b82f6';
+        }
+
         tbody.innerHTML += `
             <tr>
                 <td>${record.employeeName}</td>
@@ -102,7 +114,7 @@ function renderAttendanceTable(data) {
                 <td dir="ltr" style="text-align:right">${checkInTime}</td>
                 <td dir="ltr" style="text-align:right">${checkOutTime}</td>
                 <td>${record.totalHours ? record.totalHours + ' ساعات' : '-'}</td>
-                <td><span style="color:${record.status==='late'?'var(--danger)':'var(--secondary)'}">${record.status==='late'?'متأخر':'حاضر'}</span></td>
+                <td><span style="color:${statusColor}">${statusText}</span></td>
             </tr>
         `;
     });
@@ -130,12 +142,14 @@ function generateReport() {
                  name: record.employeeName,
                  daysPresent: 0,
                  lates: 0,
+                 overtime: 0,
                  totalHours: 0
              };
         }
         
         reportAcc[record.employeeId].daysPresent += 1;
         if(record.status === 'late') reportAcc[record.employeeId].lates += 1;
+        if(record.status === 'overtime') reportAcc[record.employeeId].overtime += 1;
         if(record.totalHours) reportAcc[record.employeeId].totalHours += parseFloat(record.totalHours);
     });
 
@@ -162,11 +176,12 @@ function generateReport() {
             <tr>
                 <td>${empId}</td>
                 <td>${data.name}</td>
-                <td>${data.daysPresent} أيام</td>
-                <td><span style="color:${data.lates > 0 ? 'var(--danger)' : 'inherit'}">${data.lates} مرات</span></td>
-                <td>${data.totalHours.toFixed(2)} ساعات</td>
-            </tr>
-        `;
+                    <td>${data.daysPresent} أيام</td>
+                    <td><span style="color:${data.lates > 0 ? 'var(--danger)' : 'inherit'}">${data.lates} مرات</span></td>
+                    <td><span style="color:#3b82f6">${data.overtime || 0} أيام</span></td>
+                    <td>${data.totalHours.toFixed(2)} ساعات</td>
+                </tr>
+            `;
     }
 
     document.getElementById('kpiTotalHours').innerText = kpiTotalHours.toFixed(2);
