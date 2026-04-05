@@ -144,9 +144,7 @@ function generateReport() {
              reportAcc[empId] = {
                  name: record.employeeName,
                  uniqueDates: new Set(),
-                 lateDates: new Set(),
                  daysPresent: 0,
-                 lates: 0,
                  overtime: 0,
                  totalHours: 0
              };
@@ -159,12 +157,6 @@ function generateReport() {
             empStats.daysPresent += 1;
         }
 
-        if(record.status === 'late') {
-            if (!empStats.lateDates.has(recordDate)) {
-                empStats.lateDates.add(recordDate);
-                empStats.lates += 1;
-            }
-        }
         if(record.status === 'overtime') empStats.overtime += 1;
         if(record.totalHours) empStats.totalHours += parseFloat(record.totalHours);
     });
@@ -184,12 +176,10 @@ function generateReport() {
     }
 
     let kpiTotalHours = 0;
-    let kpiTotalLates = 0;
     let kpiActiveEmp = Object.keys(reportAcc).length;
 
     const names = [];
     const hours = [];
-    const lates = [];
 
     const tbody = document.getElementById('reportsTableBody');
     tbody.innerHTML = '';
@@ -197,13 +187,11 @@ function generateReport() {
     for (let empId in reportAcc) {
         const data = reportAcc[empId];
         kpiTotalHours += data.totalHours;
-        kpiTotalLates += data.lates;
         
         const absentDays = workingDaysPassedCount - data.daysPresent;
         
         names.push(data.name);
         hours.push((data.totalHours).toFixed(2));
-        lates.push(data.lates);
 
         tbody.innerHTML += `
             <tr>
@@ -211,7 +199,6 @@ function generateReport() {
                 <td>${data.name}</td>
                 <td>${data.daysPresent} أيام</td>
                 <td><span style="color:${absentDays > 0 ? 'var(--danger)' : 'inherit'}">${absentDays > 0 ? absentDays : 0} أيام</span></td>
-                <td><span style="color:${data.lates > 0 ? 'var(--danger)' : 'inherit'}">${data.lates} مرات</span></td>
                 <td><span style="color:#3b82f6">${data.overtime || 0} أيام</span></td>
                 <td>${data.totalHours.toFixed(2)} ساعات</td>
             </tr>
@@ -219,18 +206,15 @@ function generateReport() {
     }
 
     document.getElementById('kpiTotalHours').innerText = kpiTotalHours.toFixed(2);
-    document.getElementById('kpiTotalLates').innerText = kpiTotalLates;
     document.getElementById('kpiActiveEmp').innerText = kpiActiveEmp;
 
-    updateCharts(names, hours, lates);
+    updateCharts(names, hours);
 }
 
-function updateCharts(labels, hoursData, latesData) {
+function updateCharts(labels, hoursData) {
     const ctxHours = document.getElementById('hoursChart').getContext('2d');
-    const ctxLates = document.getElementById('latesChart').getContext('2d');
 
     if(hoursChartInstance) hoursChartInstance.destroy();
-    if(latesChartInstance) latesChartInstance.destroy();
 
     Chart.defaults.color = '#94a3b8';
     Chart.defaults.font.family = 'Tajawal';
@@ -251,25 +235,6 @@ function updateCharts(labels, hoursData, latesData) {
         options: {
             responsive: true,
             plugins: { title: { display: true, text: 'ساعات العمل لكل موظف' } }
-        }
-    });
-
-    latesChartInstance = new Chart(ctxLates, {
-        type: 'doughnut',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'مرات التأخير',
-                data: latesData,
-                backgroundColor: [
-                    '#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6', '#d946ef'
-                ],
-                borderWidth: 0
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: { title: { display: true, text: 'نسبة التأخير بين الموظفين' } }
         }
     });
 }

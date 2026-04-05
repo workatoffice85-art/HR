@@ -67,7 +67,10 @@
         </div>
         <div class="main-content">
             
-            <div id="loader" class="loader hidden"></div>
+            <div id="loader" class="loader-container hidden">
+                <div class="loader"></div>
+                <div class="loader-text">جاري جلب البيانات... يرجى الانتظار قليلاً</div>
+            </div>
 
             <!-- Attendance Tab -->
             <div id="tab-attendance" class="tab-content">
@@ -109,18 +112,11 @@
                         <h3>عدد الموظفين الفعالين</h3>
                         <div class="kpi-value" id="kpiActiveEmp">0</div>
                     </div>
-                    <div class="kpi-card">
-                        <h3>إجمالي حالات التأخير</h3>
-                        <div class="kpi-value" id="kpiTotalLates">0</div>
-                    </div>
                 </div>
 
                 <div class="charts-grid">
-                    <div class="chart-card">
+                    <div class="chart-card" style="grid-column: span 2;">
                         <canvas id="hoursChart"></canvas>
-                    </div>
-                    <div class="chart-card">
-                        <canvas id="latesChart"></canvas>
                     </div>
                 </div>
                 <table>
@@ -130,7 +126,6 @@
                             <th>اسم الموظف</th>
                             <th>أيام الحضور</th>
                             <th>أيام الغياب</th>
-                            <th>التأخير</th>
                             <th>العمل الإضافي</th>
                             <th>إجمالي الساعات</th>
                         </tr>
