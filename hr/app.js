@@ -93,28 +93,32 @@ function renderAttendanceTable(data) {
     tbody.innerHTML = '';
     // Reverse to show newest first
     [...data].reverse().forEach(record => {
-        const checkInTime = new Date(record.checkIn).toLocaleString('ar-EG');
-        const checkOutTime = record.checkOut ? new Date(record.checkOut).toLocaleString('ar-EG') : 'لم ينصرف بعد';
+        const checkInTime = new Date(record.checkIn).toLocaleString('ar-EG', {
+            hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit'
+        });
+        const checkOutTime = record.checkOut ? new Date(record.checkOut).toLocaleString('ar-EG', {
+            hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit'
+        }) : 'الآن';
         
         let statusText = 'حاضر';
-        let statusColor = 'var(--secondary)';
+        let statusClass = 'badge-success';
         
         if (record.status === 'late') {
             statusText = 'متأخر';
-            statusColor = 'var(--danger)';
+            statusClass = 'badge-danger';
         } else if (record.status === 'overtime') {
             statusText = 'عمل إضافي';
-            statusColor = '#3b82f6';
+            statusClass = 'badge-warning';
         }
 
         tbody.innerHTML += `
-            <tr>
-                <td>${record.employeeName}</td>
-                <td>${record.siteName}</td>
-                <td dir="ltr" style="text-align:right">${checkInTime}</td>
-                <td dir="ltr" style="text-align:right">${checkOutTime}</td>
-                <td>${record.totalHours ? record.totalHours + ' ساعات' : '-'}</td>
-                <td><span style="color:${statusColor}">${statusText}</span></td>
+            <tr class="fade-in">
+                <td style="font-weight:600; color:var(--text-main)">${record.employeeName}</td>
+                <td><span style="color:var(--text-muted)">📍</span> ${record.siteName}</td>
+                <td dir="ltr" style="text-align:right; font-family:monospace;">${checkInTime}</td>
+                <td dir="ltr" style="text-align:right; font-family:monospace; color:${record.checkOut ? 'inherit' : 'var(--secondary)'}">${checkOutTime}</td>
+                <td style="font-weight:500;">${record.totalHours ? record.totalHours + ' س' : '-'}</td>
+                <td><span class="badge ${statusClass}">${statusText}</span></td>
             </tr>
         `;
     });
