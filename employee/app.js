@@ -276,30 +276,26 @@ function getLocation() {
 function verifyLocation() {
     if (!lastLocation || sitesData.length === 0) return;
     
-    let isAtSite = false;
-    let closestSite = null;
+    let detectedSite = null;
 
-    if(!currentUser.assignedSites || currentUser.assignedSites.length === 0 || currentUser.assignedSites[0] === '') {
-         // for new users they might have no site assigned. If so, fallback logic or deny.
-         document.getElementById('siteText').innerText = `غير معين لأي موقع، راجع الـ HR`;
-         return;
+    // Check ALL sites - no need to assign a specific site to an employee
+    for (const site of sitesData) {
+        const dist = getDistanceFromLatLonInM(lastLocation.lat, lastLocation.lng, site.latitude, site.longitude);
+        if (dist <= site.radius) {
+            detectedSite = site;
+            break;
+        }
     }
 
-    currentUser.assignedSites.forEach(siteId => {
-        const site = sitesData.find(s => String(s.id) === String(siteId));
-        if (site) {
-            const dist = getDistanceFromLatLonInM(lastLocation.lat, lastLocation.lng, site.latitude, site.longitude);
-            if (dist <= site.radius) {
-                isAtSite = true;
-                closestSite = site;
-            }
+    if (detectedSite) {
+        document.getElementById('siteText').innerText = `✅ أنت في موقع: ${detectedSite.name}`;
+        // Buttons enabled only when face is also verified
+        if(currentFaceDescriptor) {
+            document.getElementById('btnCheckIn').disabled = false;
+            document.getElementById('btnCheckOut').disabled = false;
         }
-    });
-
-    if (isAtSite) {
-        document.getElementById('siteText').innerText = `متواجد في: ${closestSite.name}`;
     } else {
-        document.getElementById('siteText').innerText = `خارج نطاق مواقع العمل المخصصة لك`;
+        document.getElementById('siteText').innerText = `❌ أنت خارج نطاق أي موقع عمل مسجل`;
         document.getElementById('btnCheckIn').disabled = true;
         document.getElementById('btnCheckOut').disabled = true;
     }
