@@ -137,8 +137,9 @@
 
         @media (max-width: 1024px) {
             .sidebar { width: 80px; padding: 20px 10px; }
-            .sidebar h2, .nav-link span { display: none; }
+            .sidebar h2, .nav-link span:last-child { display: none; }
             .nav-link { justify-content: center; padding: 15px; }
+            .nav-link span:first-child { display: inline-block; font-size: 1.5rem; }
             :root { --sidebar-width: 80px; }
         }
 
@@ -149,8 +150,14 @@
                 flex-direction: row; overflow-x: auto; 
                 padding: 10px; gap: 10px; border-left: none; border-bottom: 1px solid var(--card-border);
             }
-            .nav-link { margin-bottom: 0; white-space: nowrap; }
-            .main-content { padding: 20px; }
+            .sidebar h2 { display: none; }
+            .nav-link { margin-bottom: 0; white-space: nowrap; padding: 10px 15px; }
+            .nav-link span:last-child { display: inline-block; font-size: 0.85rem; }
+            .nav-link span:first-child { font-size: 1.25rem; }
+            .main-content { padding: 15px; }
+            .section-header { flex-direction: column; align-items: stretch; gap: 15px; }
+            .section-header h2 { font-size: 1.5rem; text-align: center; }
+            .btn-primary { padding: 12px 20px; font-size: 0.9rem; }
             :root { --sidebar-width: 0px; }
         }
     </style>
