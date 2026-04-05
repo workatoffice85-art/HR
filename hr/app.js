@@ -235,19 +235,19 @@ async function fetchEmployees() {
             const tbody = document.getElementById('employeesTableBody');
             tbody.innerHTML = '';
             result.data.forEach(record => {
-                tbody.innerHTML += `
-                    <tr>
-                        <td>${record.name}</td>
-                        <td>${record.email}</td>
-                        <td>${record.phone || '-'}</td>
-                        <td>${record.role}</td>
-                        <td>${record.faceDescriptor ? '✔️ مسجل' : '❌ لا يوجد'}</td>
-                        <td>
-                            <button class="btn-primary" style="padding:5px 10px; font-size:0.8rem;" onclick="editEmployee('${record.id}')">تعديل</button>
-                            <button class="btn-danger" style="padding:5px 10px; font-size:0.8rem; background:transparent; border:1px solid var(--danger); color:var(--danger);" onclick="deleteEntity('deleteEmployee', '${record.id}', '${record.name}')">حذف</button>
-                        </td>
-                    </tr>
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${record.name}</td>
+                    <td>${record.email}</td>
+                    <td>${record.phone || '-'}</td>
+                    <td>${record.role}</td>
+                    <td>${record.faceDescriptor ? '✅ مسجل' : '❌ لا يوجد'}</td>
+                    <td style="display:flex; gap:8px; justify-content:center; padding:10px;">
+                        <button class="btn-primary" style="padding:5px 12px; font-size:0.85rem; width:auto;" onclick="editEmployee('${record.id}')">تعديل ✏️</button>
+                        <button class="btn-danger" style="padding:5px 12px; font-size:0.85rem; width:auto; background:rgba(239,68,68,0.1); border:1px solid var(--danger); color:var(--danger);" onclick="deleteEntity('deleteEmployee', '${record.id}', '${record.name}')">حذف 🗑️</button>
+                    </td>
                 `;
+                tbody.appendChild(row);
             });
         }
     } catch(e) { console.error(e); }
