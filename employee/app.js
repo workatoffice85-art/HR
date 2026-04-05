@@ -185,7 +185,7 @@ function logout() {
 }
 
 async function initSystem() {
-    setStatus('جاري تحميل بيانات المواقع...', 'text-muted');
+    setStatus('🔄 جاري بدء النظام (النسخة المحدثة)...', 'text-muted');
     
     // Step 1: Load Sites
     try {
@@ -193,26 +193,21 @@ async function initSystem() {
         const result = await response.json();
         if (result.success) {
             sitesData = result.data;
-            setStatus(`✅ تم تحميل ${sitesData.length} موقع. جاري تحميل نماذج الوجه...`, 'text-muted');
+            setStatus(`📡 تم تحميل ${sitesData.length} موقع. جاري تحميل الذكاء الاصطناعي...`, 'text-muted');
         } else {
-            setStatus('⚠️ تحذير: فشل تحميل المواقع: ' + result.message, 'error-text');
+            setStatus('⚠️ فشل في تحميل المواقع من السيرفر', 'error-text');
         }
     } catch(e) {
-        setStatus('❌ خطأ في تحميل المواقع: ' + e.message, 'error-text');
-        console.error('Sites load error:', e);
+        setStatus('❌ خطأ في الاتصال بالسيرفر', 'error-text');
     }
 
     // Step 2: Load Face Models
     try {
-        setStatus('جاري تحميل نموذج التعرف على الوجه (1/3)...', 'text-muted');
         await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
-        setStatus('جاري تحميل نموذج الوجه (2/3)...', 'text-muted');
         await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-        setStatus('جاري تحميل نموذج الوجه (3/3)...', 'text-muted');
         await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
     } catch(e) {
-        setStatus('❌ خطأ في تحميل نماذج الوجه: ' + e.message, 'error-text');
-        console.error('Face model load error:', e);
+        setStatus('❌ مشكلة في تحميل ملفات الذكاء الاصطناعي من السيرفر', 'error-text');
         return;
     }
 
@@ -224,14 +219,12 @@ async function initSystem() {
             faceMatcher = new faceapi.FaceMatcher([labeledDescriptor], 0.6);
             setStatus('✅ النظام جاهز. وجّه الكاميرا إليك...', 'success-text');
         } catch(e) {
-            setStatus('⚠️ خطأ في بصمة الوجه تأكد من تسجيل بصمتك أولاً.', 'error-text');
-            console.error('Face matcher error:', e);
+            setStatus('⚠️ خطأ في قراءة بصمة الوجه المسجلة', 'error-text');
         }
     } else {
-        setStatus('⚠️ لم يتم تسجيل بصمة وجه بعد. وجّه الكاميرا إليك...', 'text-muted');
+        setStatus('⚠️ لم يتم تسجيل بصمة وجه. وجّه الكاميرا إليك...', 'text-muted');
     }
 
-    // Step 4: Start Camera & GPS
     startVideo();
     getLocation();
 }
@@ -303,10 +296,17 @@ function verifyLocation() {
     if (!lastLocation || sitesData.length === 0) return;
     
     let detectedSite = null;
+    let minDistance = Infinity;
+    let closestSiteName = "";
 
-    // Check ALL sites - no need to assign a specific site to an employee
+    // Check ALL sites
     for (const site of sitesData) {
         const dist = getDistanceFromLatLonInM(lastLocation.lat, lastLocation.lng, site.latitude, site.longitude);
+        if (dist < minDistance) {
+            minDistance = dist;
+            closestSiteName = site.name;
+        }
+        
         if (dist <= site.radius) {
             detectedSite = site;
             break;
@@ -315,13 +315,13 @@ function verifyLocation() {
 
     if (detectedSite) {
         document.getElementById('siteText').innerText = `✅ أنت في موقع: ${detectedSite.name}`;
-        // Buttons enabled only when face is also verified
         if(currentFaceDescriptor) {
             document.getElementById('btnCheckIn').disabled = false;
             document.getElementById('btnCheckOut').disabled = false;
         }
     } else {
-        document.getElementById('siteText').innerText = `❌ أنت خارج نطاق أي موقع عمل مسجل`;
+        const distText = minDistance === Infinity ? "" : `(أقرب موقع لك هو ${closestSiteName} ويبعد ${(minDistance/1000).toFixed(2)} كم)`;
+        document.getElementById('siteText').innerText = `❌ أنت خارج النطاق. ${distText}`;
         document.getElementById('btnCheckIn').disabled = true;
         document.getElementById('btnCheckOut').disabled = true;
     }
