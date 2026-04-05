@@ -319,12 +319,23 @@ async function parseMapLink() {
                 method: 'POST', body: JSON.stringify({ action: 'resolveMapLink', link: link }), headers:{'Content-Type':'text/plain'}
             });
             const result = await res.json();
-            if (result.success && result.url) {
-                extractLatLngFromUrl(result.url);
+            if (result.success) {
+                if (result.lat && result.lng) {
+                     document.getElementById('siteLat').value = result.lat;
+                     document.getElementById('siteLng').value = result.lng;
+                } else if (result.url) {
+                     extractLatLngFromUrl(result.url); // Fallback
+                } else {
+                     document.getElementById('siteLat').placeholder = 'فشل المعالجة';
+                     document.getElementById('siteLng').placeholder = 'فشل المعالجة';
+                }
+            } else {
+                throw new Error("Backend Error: " + result.message);
             }
         } catch (e) {
             console.error('Failed to resolve link', e);
-            document.getElementById('siteLat').placeholder = 'فشل الاستخراج';
+            document.getElementById('siteLat').placeholder = 'فشل الاستخراج (انسخ الأرقام يدوياً)';
+            document.getElementById('siteLng').placeholder = 'فشل الاستخراج (انسخ الأرقام يدوياً)';
         }
     } else {
         extractLatLngFromUrl(link);

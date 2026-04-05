@@ -209,14 +209,32 @@ function doPost(e) {
            throw new Error("رمز التحقق غير صحيح أو منتهي الصلاحية");
        }
     }
-    // Resolve Short Google Maps Links (Server-Side to bypass CORS)
+    // Resolve Short Google Maps Links (Server-Side to bypass CORS & Obfuscation)
     else if (data.action === "resolveMapLink") {
         try {
             var options = { followRedirects: false, muteHttpExceptions: true };
             var fetchRes = UrlFetchApp.fetch(data.link, options);
-            var headers = fetchRes.getHeaders();
-            var finalUrl = headers['Location'] || headers['location'] || data.link;
-            response = { success: true, url: finalUrl };
+            var finalUrl = fetchRes.getHeaders()['Location'] || fetchRes.getHeaders()['location'] || data.link;
+            
+            var lat = null, lng = null;
+            // 1. Check if the redirected URL already contains it
+            var match1 = finalUrl.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+            if (match1) { lat = match1[1]; lng = match1[2]; }
+            else {
+                // 2. Fetch the HTML page and look for embedded coordinates
+                var htmlRes = UrlFetchApp.fetch(finalUrl).getContentText();
+                var match2 = htmlRes.match(/center=(-?\d+\.\d+)%2C(-?\d+\.\d+)/) || htmlRes.match(/center=(-?\d+\.\d+),(-?\d+\.\d+)/);
+                if (match2) { lat = match2[1]; lng = match2[2]; }
+                else {
+                    var match3 = htmlRes.match(/\[null,null,(-?\d+\.\d+),(-?\d+\.\d+)\]/);
+                    if (match3) { lat = match3[1]; lng = match3[2]; }
+                    else {
+                        var match4 = htmlRes.match(/@(-?\d+\.\d+),(-?\d+\.\d+),/);
+                        if (match4) { lat = match4[1]; lng = match4[2]; }
+                    }
+                }
+            }
+            response = { success: true, url: finalUrl, lat: lat, lng: lng };
         } catch(e) {
             response = { success: false, message: e.toString() };
         }
