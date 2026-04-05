@@ -144,6 +144,7 @@ function generateReport() {
              reportAcc[empId] = {
                  name: record.employeeName,
                  uniqueDates: new Set(),
+                 lateDates: new Set(),
                  daysPresent: 0,
                  lates: 0,
                  overtime: 0,
@@ -158,7 +159,12 @@ function generateReport() {
             empStats.daysPresent += 1;
         }
 
-        if(record.status === 'late') empStats.lates += 1;
+        if(record.status === 'late') {
+            if (!empStats.lateDates.has(recordDate)) {
+                empStats.lateDates.add(recordDate);
+                empStats.lates += 1;
+            }
+        }
         if(record.status === 'overtime') empStats.overtime += 1;
         if(record.totalHours) empStats.totalHours += parseFloat(record.totalHours);
     });

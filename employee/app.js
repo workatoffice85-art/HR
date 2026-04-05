@@ -517,7 +517,6 @@ function renderMyReports(data, monthStr) {
         }
     }
 
-    let totalLates = presentRecords.filter(r => r.status === 'late').length;
     let totalHours = 0;
     
     const tbody = document.getElementById('myReportsTableBody');
@@ -525,8 +524,9 @@ function renderMyReports(data, monthStr) {
 
     // Create a set of dates where user was present for quick lookup
     const presentDates = new Set(presentRecords.map(r => new Date(r.checkIn).toDateString()));
+    const lateDates = new Set(presentRecords.filter(r => r.status === 'late').map(r => new Date(r.checkIn).toDateString()));
 
-    // 3. Build the combined list (Present + Absent)
+    let totalLates = lateDates.size; // Only count one late per unique date
     const fullReport = [];
 
     // Add Present Records
