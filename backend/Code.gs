@@ -424,8 +424,8 @@ function doPost(e) {
             data.name || rows[i][5],
             rows[i][3], rows[i][4], data.radius || 20
           ]);
-          // Mark as approved (column 7)
-          reqSheet.getRange(i + 1, 7).setValue("approved");
+          // Mark as approved (column 8)
+          reqSheet.getRange(i + 1, 8).setValue("approved");
           return json({ success: true, message: "تمت الموافقة على الموقع وإضافته بنجاح." });
         }
       }
@@ -433,11 +433,11 @@ function doPost(e) {
     }
 
     if (data.action === "rejectSiteRequest") {
-      var s = getOrCreateSheet("siteRequests", ["id", "employeeId", "employeeName", "latitude", "longitude", "suggestedName", "status", "timestamp"]);
+      var s = getOrCreateSheet("siteRequests", ["id", "employeeId", "employeeName", "latitude", "longitude", "suggestedName", "mapLink", "status", "timestamp"]);
       var rows = s.getDataRange().getValues();
       for (var i = 1; i < rows.length; i++) {
         if (String(rows[i][0]) === String(data.id)) {
-          s.getRange(i + 1, 7).setValue("rejected");
+          s.getRange(i + 1, 8).setValue("rejected");
           return json({ success: true, message: "تم رفض الطلب." });
         }
       }

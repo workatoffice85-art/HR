@@ -20,6 +20,12 @@ function checkSession() {
         document.getElementById('hrLoginSection').classList.add('hidden');
         document.getElementById('dashboardSection').classList.remove('hidden');
         initDashboard();
+        
+        // Restore active tab
+        const savedTab = localStorage.getItem('hrActiveTab');
+        if (savedTab) {
+            showTab(savedTab);
+        }
     }
 }
 
@@ -62,8 +68,19 @@ function logout() {
 function showTab(tabName) {
     document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
     document.querySelectorAll('.nav-link').forEach(el => el.classList.remove('active'));
-    document.getElementById('tab-' + tabName).classList.remove('hidden');
-    event.currentTarget.classList.add('active');
+    
+    const targetTab = document.getElementById('tab-' + tabName);
+    if (targetTab) targetTab.classList.remove('hidden');
+    
+    // Highlight the active nav link
+    document.querySelectorAll('.nav-link').forEach(link => {
+        const onclickAttr = link.getAttribute('onclick');
+        if (onclickAttr && onclickAttr.includes(`'${tabName}'`)) {
+            link.classList.add('active');
+        }
+    });
+
+    localStorage.setItem('hrActiveTab', tabName);
     
     if (tabName === 'attendance') fetchAttendance();
     if (tabName === 'employees') fetchEmployees();
@@ -74,7 +91,7 @@ function showTab(tabName) {
 
     // Close sidebar on mobile after clicking a link
     const sidebar = document.querySelector('.sidebar');
-    if (window.innerWidth <= 768 && sidebar.classList.contains('active')) {
+    if (window.innerWidth <= 768 && sidebar && sidebar.classList.contains('active')) {
         toggleSidebar();
     }
 }
