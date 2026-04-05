@@ -416,43 +416,92 @@ function getWorkingDaysPassed(year, month) {
 function renderMyReports(data, monthStr) {
     const targetYear = parseInt(monthStr.split('-')[0]);
     const targetMonth = parseInt(monthStr.split('-')[1]) - 1;
+    const now = new Date();
 
-    const filtered = data.filter(record => {
+    // 1. Get all present days in this month
+    const presentRecords = data.filter(record => {
         const d = new Date(record.checkIn);
         return d.getFullYear() === targetYear && d.getMonth() === targetMonth;
     });
 
-    let totalPresent = filtered.length;
-    let totalLates = filtered.filter(r => r.status === 'late').length;
+    // 2. Identify working days that passed (Sun-Thu)
+    const workingDaysPassed = [];
+    const endDay = (targetYear === now.getFullYear() && targetMonth === now.getMonth()) 
+                   ? now.getDate() 
+                   : new Date(targetYear, targetMonth + 1, 0).getDate();
+
+    for (let i = 1; i <= endDay; i++) {
+        const d = new Date(targetYear, targetMonth, i);
+        // Weekend in Egypt: Friday (5) and Saturday (6)
+        if (d.getDay() !== 5 && d.getDay() !== 6) {
+            workingDaysPassed.push(new Date(targetYear, targetMonth, i).toDateString());
+        }
+    }
+
+    let totalLates = presentRecords.filter(r => r.status === 'late').length;
     let totalHours = 0;
     
     const tbody = document.getElementById('myReportsTableBody');
     tbody.innerHTML = '';
-    
-    // Reverse to show newest at top
-    [...filtered].reverse().forEach(record => {
+
+    // Create a set of dates where user was present for quick lookup
+    const presentDates = new Set(presentRecords.map(r => new Date(r.checkIn).toDateString()));
+
+    // 3. Build the combined list (Present + Absent)
+    const fullReport = [];
+
+    // Add Present Records
+    presentRecords.forEach(record => {
         if(record.totalHours) totalHours += parseFloat(record.totalHours);
-        
-        const checkInTime = new Date(record.checkIn).toLocaleString('ar-EG');
-        const checkOutTime = record.checkOut ? new Date(record.checkOut).toLocaleString('ar-EG') : 'لم ينصرف بعد';
-        
-        tbody.innerHTML += `
-            <tr>
-                <td style="padding:10px; border-bottom:1px solid var(--card-border)">${new Date(record.checkIn).toLocaleDateString('ar-EG')}</td>
-                <td style="padding:10px; border-bottom:1px solid var(--card-border)" dir="ltr">${new Date(record.checkIn).toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'})}</td>
-                <td style="padding:10px; border-bottom:1px solid var(--card-border)" dir="ltr">${record.checkOut ? new Date(record.checkOut).toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'}) : '-'}</td>
-                <td style="padding:10px; border-bottom:1px solid var(--card-border)"><span style="color:${record.status==='late'?'var(--danger)':'var(--secondary)'}">${record.status==='late'?'متأخر':'حاضر'}</span></td>
-            </tr>
-        `;
+        fullReport.push({
+            date: new Date(record.checkIn),
+            checkIn: record.checkIn,
+            checkOut: record.checkOut,
+            status: record.status, // 'present' or 'late'
+            type: 'entry'
+        });
     });
 
-    // Calculate Absences: working days passed minus present days (simplistic logic)
-    const workingDaysPassed = getWorkingDaysPassed(targetYear, targetMonth);
-    let totalAbsent = workingDaysPassed - totalPresent;
-    if(totalAbsent < 0) totalAbsent = 0;
+    // Add Absent Days (Only for working days that have no record)
+    workingDaysPassed.forEach(dateStr => {
+        if (!presentDates.has(dateStr)) {
+            fullReport.push({
+                date: new Date(dateStr),
+                type: 'absent'
+            });
+        }
+    });
 
-    document.getElementById('empTotalPresent').innerText = totalPresent;
-    document.getElementById('empTotalAbsent').innerText = totalAbsent;
+    // Sort by date descending
+    fullReport.sort((a, b) => b.date - a.date);
+
+    // 4. Render to Table
+    fullReport.forEach(item => {
+        if (item.type === 'entry') {
+            tbody.innerHTML += `
+                <tr>
+                    <td style="padding:10px; border-bottom:1px solid var(--card-border)">${item.date.toLocaleDateString('ar-EG')}</td>
+                    <td style="padding:10px; border-bottom:1px solid var(--card-border)" dir="ltr">${new Date(item.checkIn).toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'})}</td>
+                    <td style="padding:10px; border-bottom:1px solid var(--card-border)" dir="ltr">${item.checkOut ? new Date(item.checkOut).toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'}) : '-'}</td>
+                    <td style="padding:10px; border-bottom:1px solid var(--card-border)"><span style="color:${item.status==='late'?'var(--danger)':'var(--secondary)'}">${item.status==='late'?'متأخر':'حاضر'}</span></td>
+                </tr>
+            `;
+        } else {
+            // Absent Row
+            tbody.innerHTML += `
+                <tr style="background: rgba(239, 68, 68, 0.05);">
+                    <td style="padding:10px; border-bottom:1px solid var(--card-border)">${item.date.toLocaleDateString('ar-EG')}</td>
+                    <td colspan="2" style="padding:10px; border-bottom:1px solid var(--card-border); text-align:center; color:var(--danger); font-size:0.8rem;">غائب (لم يتم تسجيل حضور)</td>
+                    <td style="padding:10px; border-bottom:1px solid var(--card-border)"><span style="color:var(--danger)">غائب</span></td>
+                </tr>
+            `;
+        }
+    });
+
+    const totalAbsent = workingDaysPassed.length - presentRecords.length;
+
+    document.getElementById('empTotalPresent').innerText = presentRecords.length;
+    document.getElementById('empTotalAbsent').innerText = totalAbsent > 0 ? totalAbsent : 0;
     document.getElementById('empTotalLates').innerText = totalLates;
     document.getElementById('empTotalHours').innerText = totalHours.toFixed(2);
 }
