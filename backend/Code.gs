@@ -166,6 +166,20 @@ function doGet(e) {
       return json({ success:true, data:records });
     }
 
+    if (action === "getSettings") {
+      var s = getOrCreateSheet("settings", ["key", "value"]);
+      var rows = s.getDataRange().getValues();
+      var settings = {};
+      for (var i = 1; i < rows.length; i++) {
+        settings[rows[i][0]] = rows[i][1];
+      }
+      // Default values if not set
+      if (!settings.workStartTime) settings.workStartTime = "09:00";
+      if (!settings.workEndTime) settings.workEndTime = "17:00";
+      
+      return json({ success: true, data: settings });
+    }
+
     return json({success:false,message:"Unknown action"});
 
   } catch(e){
@@ -353,6 +367,27 @@ function doPost(e) {
       throw new Error("الموقع غير موجود");
     }
 
+    // UPDATE SETTINGS
+    if (data.action === "updateSettings") {
+      var s = getOrCreateSheet("settings", ["key", "value"]);
+      var rows = s.getDataRange().getValues();
+      
+      for (var key in data.settings) {
+        var found = false;
+        for (var i = 1; i < rows.length; i++) {
+          if (rows[i][0] === key) {
+            s.getRange(i + 1, 2).setValue(data.settings[key]);
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          s.appendRow([key, data.settings[key]]);
+        }
+      }
+      return json({ success: true, message: "تم تحديث الإعدادات بنجاح" });
+    }
+
     // CHECK-IN
     if (data.action === "addAttendance") {
       var site = validateAll(ss, data);
@@ -377,11 +412,23 @@ function doPost(e) {
       var dayOfWeek = checkInDate.getDay();
       var manualStatus = "present";
 
+      // GET SETTINGS
+      var settingsSheet = getOrCreateSheet("settings", ["key", "value"]);
+      var sRows = settingsSheet.getDataRange().getValues();
+      var workStart = "09:15"; // Default
+      for(var j=1; j<sRows.length; j++) {
+        if(sRows[j][0] === "workStartTime") {
+          workStart = sRows[j][1];
+          break;
+        }
+      }
+
       if (dayOfWeek === 5 || dayOfWeek === 6) {
         manualStatus = "overtime";
       } else {
+        var parts = workStart.split(':');
         var lateLimit = new Date(checkInDate);
-        lateLimit.setHours(9, 15, 0, 0); // 09:15 AM
+        lateLimit.setHours(parseInt(parts[0]), parseInt(parts[1] || 0), 0, 0);
         manualStatus = (checkInDate > lateLimit) ? "late" : "present";
       }
 

@@ -69,6 +69,13 @@ function showTab(tabName) {
     if (tabName === 'employees') fetchEmployees();
     if (tabName === 'sites') fetchSites();
     if (tabName === 'reports') generateReport();
+    if (tabName === 'settings') fetchSettings();
+
+    // Close sidebar on mobile after clicking a link
+    const sidebar = document.querySelector('.sidebar');
+    if (window.innerWidth <= 768 && sidebar.classList.contains('active')) {
+        toggleSidebar();
+    }
 }
 
 async function initDashboard() {
@@ -510,5 +517,65 @@ async function saveSite() {
             document.getElementById('siteRadius').value = '20';
         } else { alert("خطأ في الحفظ: " + (result.message||'')); }
     } catch(e) { console.error(e); alert("خطأ في الاتصال: " + e.message); }
+    document.getElementById('loader').classList.add('hidden');
+}
+
+// Sidebar Toggle Logic
+function toggleSidebar() {
+    const sidebar = document.querySelector('.sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    sidebar.classList.toggle('active');
+    overlay.classList.toggle('show');
+}
+
+async function fetchSettings() {
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const res = await fetch(`${API_URL}?action=getSettings`);
+        const result = await res.json();
+        if (result.success) {
+            document.getElementById('setWorkStartTime').value = result.data.workStartTime || "09:00";
+            document.getElementById('setWorkEndTime').value = result.data.workEndTime || "17:00";
+        }
+    } catch (e) {
+        console.error("Fetch Settings error", e);
+    }
+    document.getElementById('loader').classList.add('hidden');
+}
+
+async function saveSettings() {
+    const workStartTime = document.getElementById('setWorkStartTime').value;
+    const workEndTime = document.getElementById('setWorkEndTime').value;
+
+    if (!workStartTime || !workEndTime) {
+        return alert("الرجاء تحديد كافة المواعيد");
+    }
+
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const payload = {
+            action: 'updateSettings',
+            settings: {
+                workStartTime: workStartTime,
+                workEndTime: workEndTime
+            }
+        };
+
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify(payload),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const result = await res.json();
+        
+        if (result.success) {
+            alert("✅ تم حفظ الإعدادات بنجاح");
+        } else {
+            alert("❌ خطأ: " + result.message);
+        }
+    } catch (e) {
+        console.error("Save settings error", e);
+        alert("حدث خطأ في الاتصال");
+    }
     document.getElementById('loader').classList.add('hidden');
 }
