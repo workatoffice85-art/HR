@@ -68,6 +68,7 @@ function showTab(tabName) {
     if (tabName === 'attendance') fetchAttendance();
     if (tabName === 'employees') fetchEmployees();
     if (tabName === 'sites') fetchSites();
+    if (tabName === 'siteRequests') fetchSiteRequests();
     if (tabName === 'reports') generateReport();
     if (tabName === 'settings') fetchSettings();
 
@@ -577,5 +578,94 @@ async function saveSettings() {
         console.error("Save settings error", e);
         alert("حدث خطأ في الاتصال");
     }
+    document.getElementById('loader').classList.add('hidden');
+}
+
+// ------ SITE REQUESTS LOGIC ------ //
+async function fetchSiteRequests() {
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const res = await fetch(`${API_URL}?action=getSiteRequests`);
+        const result = await res.json();
+        if(result.success) {
+            renderSiteRequestsTable(result.data);
+        }
+    } catch(e) { console.error("Fetch Site Requests error:", e); }
+    document.getElementById('loader').classList.add('hidden');
+}
+
+function renderSiteRequestsTable(data) {
+    const tbody = document.getElementById('siteRequestsTableBody');
+    tbody.innerHTML = '';
+    [...data].reverse().forEach(req => {
+        let statusText = 'قيد الانتظار';
+        let statusColor = 'var(--warning)';
+        
+        if (req.status === 'approved') {
+            statusText = 'تمت الموافقة';
+            statusColor = 'var(--secondary)';
+        } else if (req.status === 'rejected') {
+            statusText = 'مرفوض';
+            statusColor = 'var(--danger)';
+        }
+
+        const actions = req.status === 'pending' ? `
+            <div style="display:flex; gap:8px;">
+                <button class="btn-primary" style="padding:5px 12px; font-size:0.85rem; width:auto; background:var(--secondary);" onclick="approveRequest('${req.id}', '${req.suggestedName}')">موافقة ✓</button>
+                <button class="btn-danger" style="padding:5px 12px; font-size:0.85rem; width:auto;" onclick="rejectRequest('${req.id}')">رفض ✗</button>
+            </div>
+        ` : '-';
+
+        tbody.innerHTML += `
+            <tr>
+                <td>${req.employeeName}</td>
+                <td>${req.suggestedName}</td>
+                <td dir="ltr" style="text-align:right">${req.latitude}, ${req.longitude}</td>
+                <td style="text-align:right">${new Date(req.timestamp).toLocaleString('ar-EG')}</td>
+                <td><span style="color:${statusColor}">${statusText}</span></td>
+                <td>${actions}</td>
+            </tr>
+        `;
+    });
+}
+
+async function approveRequest(id, suggestedName) {
+    const finalName = prompt("تأكيد اسم الموقع:", suggestedName);
+    if (finalName === null) return;
+    const finalRadius = prompt("تحديد نطاق الحضور (بالمتر):", "20");
+    if (!finalRadius) return;
+
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'approveSiteRequest', id: id, name: finalName, radius: finalRadius }),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const result = await res.json();
+        if(result.success) {
+            alert(result.message);
+            fetchSiteRequests();
+        } else alert("خطأ: " + result.message);
+    } catch(e) { console.error(e); alert("خطأ في الاتصال"); }
+    document.getElementById('loader').classList.add('hidden');
+}
+
+async function rejectRequest(id) {
+    if(!confirm("هل أنت متأكد من رفض هذا الموقع؟")) return;
+
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'rejectSiteRequest', id: id }),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const result = await res.json();
+        if(result.success) {
+            alert(result.message);
+            fetchSiteRequests();
+        } else alert("خطأ: " + result.message);
+    } catch(e) { console.error(e); alert("خطأ في الاتصال"); }
     document.getElementById('loader').classList.add('hidden');
 }

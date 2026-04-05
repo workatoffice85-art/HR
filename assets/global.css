@@ -9,6 +9,7 @@
   --card-bg: rgba(30, 41, 59, 0.7);
   --card-border: rgba(255, 255, 255, 0.1);
   --danger: #EF4444;
+  --warning: #EAB308;
   --font-family: 'Tajawal', sans-serif;
 }
 
@@ -66,9 +67,10 @@ body {
 .header h1 {
   font-size: 2rem;
   font-weight: 800;
-  background: linear-gradient(to right, #60A5FA, #34D399);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+    background: linear-gradient(to right, #60A5FA, #34D399);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
   margin-bottom: 10px;
 }
 

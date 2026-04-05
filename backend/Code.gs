@@ -180,6 +180,18 @@ function doGet(e) {
       return json({ success: true, data: settings });
     }
 
+    if (action === "getSiteRequests") {
+      var s = getOrCreateSheet("siteRequests", ["id", "employeeId", "employeeName", "latitude", "longitude", "suggestedName", "status", "timestamp"]);
+      var d = s.getDataRange().getValues();
+      d.shift();
+      return json({
+        success: true,
+        data: d.map(function(r) { return {
+          id: r[0], employeeId: r[1], employeeName: r[2], latitude: r[3], longitude: r[4], suggestedName: r[5], status: r[6], timestamp: r[7]
+        };})
+      });
+    }
+
     return json({success:false,message:"Unknown action"});
 
   } catch(e){
@@ -387,6 +399,49 @@ function doPost(e) {
         }
       }
       return json({ success: true, message: "تم تحديث الإعدادات بنجاح" });
+    }
+
+    // SITE REQUESTS
+    if (data.action === "addSiteRequest") {
+      var s = getOrCreateSheet("siteRequests", ["id", "employeeId", "employeeName", "latitude", "longitude", "suggestedName", "status", "timestamp"]);
+      s.appendRow([
+        "REQ" + Math.floor(10000 + Math.random() * 90000),
+        data.employeeId, data.employeeName, data.latitude, data.longitude, data.suggestedName, "pending", new Date().toISOString()
+      ]);
+      return json({ success: true, message: "تم إرسال طلب تسجيل الموقع بنجاح، بانتظار موافقة الإدارة." });
+    }
+
+    if (data.action === "approveSiteRequest") {
+      var reqSheet = getOrCreateSheet("siteRequests", ["id", "employeeId", "employeeName", "latitude", "longitude", "suggestedName", "status", "timestamp"]);
+      var sitesSheet = getOrCreateSheet("sites", ["id", "name", "latitude", "longitude", "radius"]);
+      var rows = reqSheet.getDataRange().getValues();
+      
+      for (var i = 1; i < rows.length; i++) {
+        if (String(rows[i][0]) === String(data.id)) {
+          // Add to sites
+          sitesSheet.appendRow([
+            Math.floor(10000 + Math.random() * 90000),
+            data.name || rows[i][5],
+            rows[i][3], rows[i][4], data.radius || 20
+          ]);
+          // Mark as approved (column 7)
+          reqSheet.getRange(i + 1, 7).setValue("approved");
+          return json({ success: true, message: "تمت الموافقة على الموقع وإضافته بنجاح." });
+        }
+      }
+      throw new Error("الطلب غير موجود");
+    }
+
+    if (data.action === "rejectSiteRequest") {
+      var s = getOrCreateSheet("siteRequests", ["id", "employeeId", "employeeName", "latitude", "longitude", "suggestedName", "status", "timestamp"]);
+      var rows = s.getDataRange().getValues();
+      for (var i = 1; i < rows.length; i++) {
+        if (String(rows[i][0]) === String(data.id)) {
+          s.getRange(i + 1, 7).setValue("rejected");
+          return json({ success: true, message: "تم رفض الطلب." });
+        }
+      }
+      throw new Error("الطلب غير موجود");
     }
 
     // CHECK-IN

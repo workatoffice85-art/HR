@@ -66,6 +66,7 @@
             <a class="nav-link" onclick="showTab('reports')">التقارير الشهرية</a>
             <a class="nav-link" onclick="showTab('employees')">إدارة الموظفين</a>
             <a class="nav-link" onclick="showTab('sites')">إدارة المواقع</a>
+            <a class="nav-link" onclick="showTab('siteRequests')">طلبات تسجيل المواقع 📍</a>
             <a class="nav-link" onclick="showTab('settings')">الإعدادات ⚙️</a>
             <a class="nav-link" onclick="logout()" style="color:var(--danger); margin-top:50px;">تسجيل خروج</a>
         </div>
@@ -188,6 +189,29 @@
                             </tr>
                         </thead>
                         <tbody id="sitesTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Site Requests Tab -->
+            <div id="tab-siteRequests" class="tab-content hidden">
+                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                    <h2>طلبات تسجيل المواقع الجديدة</h2>
+                    <button class="btn-primary" style="width:auto;" onclick="fetchSiteRequests()">تحديث</button>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>الموظف</th>
+                                <th>اسم الموقع المقترح</th>
+                                <th>الإحداثيات (Lat, Lng)</th>
+                                <th>التاريخ</th>
+                                <th>الحالة</th>
+                                <th>الإجراءات</th>
+                            </tr>
+                        </thead>
+                        <tbody id="siteRequestsTableBody"></tbody>
                     </table>
                 </div>
             </div>

@@ -389,6 +389,7 @@ function verifyLocation() {
 
     if (detectedSite) {
         document.getElementById('siteText').innerText = `✅ أنت في موقع: ${detectedSite.name}`;
+        document.getElementById('btnRequestSite').classList.add('hidden');
         if(currentFaceDescriptor) {
             document.getElementById('btnCheckIn').disabled = false;
             document.getElementById('btnCheckOut').disabled = false;
@@ -396,6 +397,7 @@ function verifyLocation() {
     } else {
         const distText = minDistance === Infinity ? "" : `(أقرب موقع لك هو ${closestSiteName} ويبعد ${(minDistance/1000).toFixed(2)} كم)`;
         document.getElementById('siteText').innerText = `❌ أنت خارج النطاق. ${distText}`;
+        document.getElementById('btnRequestSite').classList.remove('hidden');
         document.getElementById('btnCheckIn').disabled = true;
         document.getElementById('btnCheckOut').disabled = true;
     }
@@ -450,6 +452,51 @@ async function handleCheckOut() {
         }
         else alert('خطأ: ' + result.message);
     } catch(e) { console.error(e); alert('حدث خطأ في الشبكة: ' + e.message); }
+    document.getElementById('loader').classList.add('hidden');
+}
+
+// ------ SITE REQUEST LOGIC ------ //
+function openRequestModal() {
+    document.getElementById('requestSiteModal').classList.remove('hidden');
+    document.getElementById('suggestedSiteName').value = '';
+}
+
+function closeRequestModal() {
+    document.getElementById('requestSiteModal').classList.add('hidden');
+}
+
+async function submitSiteRequest() {
+    const name = document.getElementById('suggestedSiteName').value.trim();
+    if (!name) return alert("يرجى إدخال اسم الموقع");
+    if (!lastLocation) return alert("يجب توفير إحداثيات الموقع");
+
+    const payload = {
+        action: 'addSiteRequest',
+        employeeId: currentUser.id,
+        employeeName: currentUser.name,
+        latitude: lastLocation.lat,
+        longitude: lastLocation.lng,
+        suggestedName: name
+    };
+
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify(payload),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const result = await res.json();
+        if (result.success) {
+            alert(result.message);
+            closeRequestModal();
+        } else {
+            alert("خطأ: " + result.message);
+        }
+    } catch (e) {
+        console.error(e);
+        alert("فشل الاتصال بالسيرفر");
+    }
     document.getElementById('loader').classList.add('hidden');
 }
 
