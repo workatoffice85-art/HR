@@ -118,7 +118,6 @@ function renderAttendanceTable(data) {
                 <td dir="ltr" style="text-align:right; font-family:monospace;">${checkInTime}</td>
                 <td dir="ltr" style="text-align:right; font-family:monospace; color:${record.checkOut ? 'inherit' : 'var(--secondary)'}">${checkOutTime}</td>
                 <td style="font-weight:500;">${record.totalHours ? record.totalHours + ' س' : '-'}</td>
-                <td><span class="badge ${statusClass}">${statusText}</span></td>
             </tr>
         `;
     });
