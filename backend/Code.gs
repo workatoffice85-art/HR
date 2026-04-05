@@ -232,31 +232,40 @@ function doPost(e) {
            throw new Error("رمز التحقق غير صحيح أو منتهي الصلاحية");
        }
     }
-
-    // RESOLVE MAP LINK
-    if (data.action === "resolveMapLink") {
+    // Resolve Short Google Maps Links (Smart Extraction)
+    else if (data.action === "resolveMapLink") {
         try {
-            var options = { followRedirects: false, muteHttpExceptions: true };
-            var fetchRes = UrlFetchApp.fetch(data.link, options);
-            var finalUrl = fetchRes.getHeaders()['Location'] || fetchRes.getHeaders()['location'] || data.link;
-            
-            var lat = null, lng = null;
-            var match1 = finalUrl.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
-            if (match1) { lat = match1[1]; lng = match1[2]; }
-            else {
-                var htmlRes = UrlFetchApp.fetch(finalUrl).getContentText();
-                var match2 = htmlRes.match(/center=(-?\d+\.\d+)%2C(-?\d+\.\d+)/) || htmlRes.match(/center=(-?\d+\.\d+),(-?\d+\.\d+)/);
-                if (match2) { lat = match2[1]; lng = match2[2]; }
-                else {
-                    var match3 = htmlRes.match(/\[null,null,(-?\d+\.\d+),(-?\d+\.\d+)\]/);
-                    if (match3) { lat = match3[1]; lng = match3[2]; }
-                    else {
-                        var match4 = htmlRes.match(/@(-?\d+\.\d+),(-?\d+\.\d+),/);
-                        if (match4) { lat = match4[1]; lng = match4[2]; }
-                    }
-                }
+            // 1. Follow redirects manually up to 3 times to get the deep URL
+            var url = data.link;
+            for(var i=0; i<3; i++) {
+               var res = UrlFetchApp.fetch(url, { followRedirects: false, muteHttpExceptions: true });
+               var loc = res.getHeaders()['Location'] || res.getHeaders()['location'];
+               if(loc) { url = loc; } else { break; }
             }
-            return json({ success: true, url: finalUrl, lat: lat, lng: lng });
+
+            var lat = null, lng = null;
+            // 2. Try to extract from URL (@lat,lng or center=lat,lng)
+            var urlMatch = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/) || 
+                           url.match(/center=(-?\d+\.\d+)(?:%2C|,)(-?\d+\.\d+)/) ||
+                           url.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/); // Common data pattern
+            
+            if (urlMatch) {
+                lat = urlMatch[1]; lng = urlMatch[2];
+            } else {
+                // 3. Last resort: Fetch HTML and look for APP_INITIALIZATION_STATE
+                var htmlRes = UrlFetchApp.fetch(url).getContentText();
+                // Pattern for coordinates inside JSON-like structures in Maps source
+                var htmlMatch = htmlRes.match(/\[null,null,(-?\d+\.\d+),(-?\d+\.\d+)\]/) ||
+                                htmlRes.match(/\[\[null,null,(-?\d+\.\d+),(-?\d+\.\d+)\]/);
+                if (htmlMatch) { lat = htmlMatch[1]; lng = htmlMatch[2]; }
+            }
+            
+            // Validation: Google HQ in USA is ~37.4, -122. If we get something near that for Egypt URLs, it's a fallback error.
+            if (lat && Math.abs(parseFloat(lat) - 37.42) < 0.1 && Math.abs(parseFloat(lng) + 122.08) < 0.1) {
+                lat = null; lng = null; // Ignore Google HQ coordinate fallback
+            }
+
+            return json({ success: true, url: url, lat: lat, lng: lng });
         } catch(e) {
             return json({ success: false, message: e.toString() });
         }
@@ -276,6 +285,34 @@ function doPost(e) {
       return json({success:true, message: "تم حفظ بيانات الموظف بنجاح"});
     }
 
+    // UPDATE EMPLOYEE
+    if (data.action === "updateEmployee") {
+      var s = getOrCreateSheet("employees", ["id","name","email","password","phone","role","assignedSites","faceDescriptor"]);
+      var rows = s.getDataRange().getValues();
+      for (var i = 1; i < rows.length; i++) {
+        if (String(rows[i][0]) === String(data.id)) {
+          // id, name, email, password, phone, role, assignedSites, faceDescriptor
+          // Update columns 2-7 (name to assignedSites) - we don't overwrite faceDescriptor here to be safe
+          s.getRange(i + 1, 2, 1, 6).setValues([[data.name, data.email, data.password, data.phone, data.role, data.assignedSites]]);
+          return json({success:true, message: "تم تحديث بيانات الموظف بنجاح"});
+        }
+      }
+      throw new Error("الموظف غير موجود");
+    }
+
+    // DELETE EMPLOYEE
+    if (data.action === "deleteEmployee") {
+      var s = getOrCreateSheet("employees", ["id","name","email","password","phone","role","assignedSites","faceDescriptor"]);
+      var rows = s.getDataRange().getValues();
+      for (var i = 1; i < rows.length; i++) {
+        if (String(rows[i][0]) === String(data.id)) {
+          s.deleteRow(i + 1);
+          return json({success:true, message: "تم حذف الموظف بنجاح"});
+        }
+      }
+      throw new Error("الموظف غير موجود");
+    }
+
     // ADD SITE
     if (data.action === "saveSite") {
       var s = getOrCreateSheet("sites",
@@ -288,6 +325,32 @@ function doPost(e) {
       ]);
 
       return json({success:true, message: "تم إضافة الموقع بنجاح"});
+    }
+
+    // UPDATE SITE
+    if (data.action === "updateSite") {
+      var s = getOrCreateSheet("sites", ["id","name","latitude","longitude","radius"]);
+      var rows = s.getDataRange().getValues();
+      for (var i = 1; i < rows.length; i++) {
+        if (String(rows[i][0]) === String(data.id)) {
+          s.getRange(i + 1, 2, 1, 4).setValues([[data.name, data.latitude, data.longitude, data.radius]]);
+          return json({success:true, message: "تم تحديث الموقع بنجاح"});
+        }
+      }
+      throw new Error("الموقع غير موجود");
+    }
+
+    // DELETE SITE
+    if (data.action === "deleteSite") {
+      var s = getOrCreateSheet("sites", ["id","name","latitude","longitude","radius"]);
+      var rows = s.getDataRange().getValues();
+      for (var i = 1; i < rows.length; i++) {
+        if (String(rows[i][0]) === String(data.id)) {
+          s.deleteRow(i + 1);
+          return json({success:true, message: "تم حذف الموقع بنجاح"});
+        }
+      }
+      throw new Error("الموقع غير موجود");
     }
 
     // CHECK-IN

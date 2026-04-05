@@ -229,6 +229,7 @@ async function fetchEmployees() {
         const res = await fetch(`${API_URL}?action=getEmployees`);
         const result = await res.json();
         if(result.success) {
+            allEmployees = result.data; // Store for editing
             const tbody = document.getElementById('employeesTableBody');
             tbody.innerHTML = '';
             result.data.forEach(record => {
@@ -239,11 +240,15 @@ async function fetchEmployees() {
                         <td>${record.phone || '-'}</td>
                         <td>${record.role}</td>
                         <td>${record.faceDescriptor ? '✔️ مسجل' : '❌ لا يوجد'}</td>
+                        <td>
+                            <button class="btn-primary" style="padding:5px 10px; font-size:0.8rem;" onclick="editEmployee('${record.id}')">تعديل</button>
+                            <button class="btn-danger" style="padding:5px 10px; font-size:0.8rem; background:transparent; border:1px solid var(--danger); color:var(--danger);" onclick="deleteEntity('deleteEmployee', '${record.id}', '${record.name}')">حذف</button>
+                        </td>
                     </tr>
                 `;
             });
         }
-    } catch(e) {}
+    } catch(e) { console.error(e); }
     document.getElementById('loader').classList.add('hidden');
 }
 
@@ -253,6 +258,7 @@ async function fetchSites() {
         const res = await fetch(`${API_URL}?action=getSites`);
         const result = await res.json();
         if(result.success) {
+            allSites = result.data; // Store for editing
             const tbody = document.getElementById('sitesTableBody');
             tbody.innerHTML = '';
             result.data.forEach(record => {
@@ -262,30 +268,83 @@ async function fetchSites() {
                         <td>${record.latitude}</td>
                         <td>${record.longitude}</td>
                         <td>${record.radius} متر</td>
+                        <td>
+                            <button class="btn-primary" style="padding:5px 10px; font-size:0.8rem;" onclick="editSite('${record.id}')">تعديل</button>
+                            <button class="btn-danger" style="padding:5px 10px; font-size:0.8rem; background:transparent; border:1px solid var(--danger); color:var(--danger);" onclick="deleteEntity('deleteSite', '${record.id}', '${record.name}')">حذف</button>
+                        </td>
                     </tr>
                 `;
             });
         }
-    } catch(e) {}
+    } catch(e) { console.error(e); }
     document.getElementById('loader').classList.add('hidden');
 }
 
-function openEmployeeModal() { document.getElementById('employeeModal').classList.remove('hidden'); }
+let allEmployees = [];
+let allSites = [];
+
+function editEmployee(id) {
+    const emp = allEmployees.find(e => String(e.id) === String(id));
+    if(!emp) return;
+    document.getElementById('editEmpId').value = emp.id;
+    document.getElementById('empModalTitle').innerText = 'تعديل بيانات موظف';
+    document.getElementById('empName').value = emp.name;
+    document.getElementById('empEmail').value = emp.email;
+    document.getElementById('empPass').value = ''; // Don't show password for security
+    document.getElementById('empRole').value = emp.role;
+    document.getElementById('empSites').value = Array.isArray(emp.assignedSites) ? emp.assignedSites.join(',') : emp.assignedSites;
+    openEmployeeModal();
+}
+
+function editSite(id) {
+    const site = allSites.find(s => String(s.id) === String(id));
+    if(!site) return;
+    document.getElementById('editSiteId').value = site.id;
+    document.getElementById('siteModalTitle').innerText = 'تعديل بيانات الموقع';
+    document.getElementById('siteName').value = site.name;
+    document.getElementById('siteMapLink').value = '';
+    document.getElementById('siteLat').value = site.latitude;
+    document.getElementById('siteLng').value = site.longitude;
+    document.getElementById('siteRadius').value = site.radius;
+    openSiteModal();
+}
+
+async function deleteEntity(action, id, name) {
+    if(!confirm(`هل أنت متأكد من حذف "${name}"؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
+    
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action, id }), headers:{'Content-Type':'text/plain'} });
+        const result = await res.json();
+        if(result.success) {
+            if(action === 'deleteEmployee') fetchEmployees();
+            else fetchSites();
+        } else alert("خطأ في الحذف: " + result.message);
+    } catch(e) { console.error(e); alert("خطأ في الاتصال"); }
+    document.getElementById('loader').classList.add('hidden');
+}
+
+function openEmployeeModal() { 
+    document.getElementById('editEmpId').value = '';
+    document.getElementById('empModalTitle').innerText = 'إضافة موظف جديد';
+    document.getElementById('employeeModal').classList.remove('hidden'); 
+}
 function closeEmployeeModal() { document.getElementById('employeeModal').classList.add('hidden'); }
 
 async function saveEmployee() {
-    const newId = 'EMP' + Math.floor(1000 + Math.random() * 9000);
+    const editId = document.getElementById('editEmpId').value;
     const name = document.getElementById('empName').value;
     const email = document.getElementById('empEmail').value;
     const pass = document.getElementById('empPass').value;
     const role = document.getElementById('empRole').value;
     const sites = document.getElementById('empSites').value;
     
-    if(!name || !email || !pass) return alert("أكمل البيانات");
+    if(!name || !email || (!editId && !pass)) return alert("أكمل البيانات");
     
     const payload = {
-        action: 'saveEmployee',
-        id: newId, name: name, email: email, password: pass, phone: "", role: role, assignedSites: sites, faceDescriptor: ""
+        action: editId ? 'updateEmployee' : 'saveEmployee',
+        id: editId || ('EMP' + Math.floor(1000 + Math.random() * 9000)),
+        name: name, email: email, password: pass, phone: "", role: role, assignedSites: sites
     };
     
     document.getElementById('loader').classList.remove('hidden');
@@ -369,18 +428,18 @@ function extractLatLngFromUrl(url) {
 }
 
 async function saveSite() {
-    // Determine the next ID? We can just use timestamp or random for site ID, 
-    // but typically it's an integer. We'll use a timestamp-based ID or just random integer.
-    const newId = Math.floor(10000 + Math.random() * 90000); 
+    const editId = document.getElementById('editSiteId').value;
     const name = document.getElementById('siteName').value.trim();
     const lat = document.getElementById('siteLat').value.trim();
     const lng = document.getElementById('siteLng').value.trim();
     const radius = document.getElementById('siteRadius').value.trim();
     
-    if(!name || !lat || !lng || !radius) return alert("الرجاء إكمال كافة البيانات (الاسم، خط الطول، خط العرض متطلبون)");
+    if(!name || !lat || !lng || !radius) return alert("الرجاء إكمال كافة البيانات");
     
     const payload = {
-        action: 'saveSite', id: newId, name: name, latitude: lat, longitude: lng, radius: radius
+        action: editId ? 'updateSite' : 'saveSite',
+        id: editId || Math.floor(10000 + Math.random() * 90000), 
+        name: name, latitude: lat, longitude: lng, radius: radius
     };
     
     document.getElementById('loader').classList.remove('hidden');
