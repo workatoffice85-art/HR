@@ -303,4 +303,89 @@ async function saveEmployee() {
     document.getElementById('loader').classList.add('hidden');
 }
 
-function openSiteModal() { alert('الرجاء إضافة المواقع مباشرة من Google Sheets في ورقة sites.'); }
+function openSiteModal() { document.getElementById('siteModal').classList.remove('hidden'); }
+function closeSiteModal() { document.getElementById('siteModal').classList.add('hidden'); }
+
+async function parseMapLink() {
+    const link = document.getElementById('siteMapLink').value.trim();
+    if (!link) return;
+    
+    // Check if it's a short link
+    if (link.includes('maps.app.goo.gl') || link.includes('goo.gl')) {
+        document.getElementById('siteLat').placeholder = 'جاري استخراج البيانات...';
+        document.getElementById('siteLng').placeholder = 'جاري استخراج البيانات...';
+        try {
+            const res = await fetch(API_URL, {
+                method: 'POST', body: JSON.stringify({ action: 'resolveMapLink', link: link }), headers:{'Content-Type':'text/plain'}
+            });
+            const result = await res.json();
+            if (result.success && result.url) {
+                extractLatLngFromUrl(result.url);
+            }
+        } catch (e) {
+            console.error('Failed to resolve link', e);
+            document.getElementById('siteLat').placeholder = 'فشل الاستخراج';
+        }
+    } else {
+        extractLatLngFromUrl(link);
+    }
+}
+
+function extractLatLngFromUrl(url) {
+    // Check for @lat,lng format
+    const regex = /@(-?\d+\.\d+),(-?\d+\.\d+)/;
+    const match = url.match(regex);
+    if (match) {
+        document.getElementById('siteLat').value = match[1];
+        document.getElementById('siteLng').value = match[2];
+    } else {
+         // Check for ?q=lat,lng format
+         const regexQ = /[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/;
+         const matchQ = url.match(regexQ);
+         if (matchQ) {
+             document.getElementById('siteLat').value = matchQ[1];
+             document.getElementById('siteLng').value = matchQ[2];
+         } else {
+             // Fallback for short link redirect formats that might contain place/name/lat,lng
+             const regexPath = /place\/[^\/]+\/(-?\d+\.\d+),(-?\d+\.\d+)/;
+             const matchPath = url.match(regexPath);
+             if (matchPath) {
+                 document.getElementById('siteLat').value = matchPath[1];
+                 document.getElementById('siteLng').value = matchPath[2];
+             }
+         }
+    }
+}
+
+async function saveSite() {
+    // Determine the next ID? We can just use timestamp or random for site ID, 
+    // but typically it's an integer. We'll use a timestamp-based ID or just random integer.
+    const newId = Math.floor(10000 + Math.random() * 90000); 
+    const name = document.getElementById('siteName').value.trim();
+    const lat = document.getElementById('siteLat').value.trim();
+    const lng = document.getElementById('siteLng').value.trim();
+    const radius = document.getElementById('siteRadius').value.trim();
+    
+    if(!name || !lat || !lng || !radius) return alert("الرجاء إكمال كافة البيانات (الاسم، خط الطول، خط العرض متطلبون)");
+    
+    const payload = {
+        action: 'saveSite', id: newId, name: name, latitude: lat, longitude: lng, radius: radius
+    };
+    
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers:{'Content-Type':'text/plain'} });
+        const result = await res.json();
+        if(result.success) {
+            closeSiteModal();
+            fetchSites();
+            // Clear inputs
+            document.getElementById('siteName').value = '';
+            document.getElementById('siteMapLink').value = '';
+            document.getElementById('siteLat').value = '';
+            document.getElementById('siteLng').value = '';
+            document.getElementById('siteRadius').value = '20';
+        } else { alert("خطأ في الحفظ: " + (result.message||'')); }
+    } catch(e) { console.error(e); alert("خطأ في الاتصال: " + e.message); }
+    document.getElementById('loader').classList.add('hidden');
+}

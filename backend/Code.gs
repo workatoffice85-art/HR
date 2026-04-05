@@ -209,6 +209,26 @@ function doPost(e) {
            throw new Error("رمز التحقق غير صحيح أو منتهي الصلاحية");
        }
     }
+    // Resolve Short Google Maps Links (Server-Side to bypass CORS)
+    else if (data.action === "resolveMapLink") {
+        try {
+            var options = { followRedirects: false, muteHttpExceptions: true };
+            var fetchRes = UrlFetchApp.fetch(data.link, options);
+            var headers = fetchRes.getHeaders();
+            var finalUrl = headers['Location'] || headers['location'] || data.link;
+            response = { success: true, url: finalUrl };
+        } catch(e) {
+            response = { success: false, message: e.toString() };
+        }
+    }
+    else if (data.action === "saveSite") {
+        var sheet = ss.getSheetByName("sites");
+        // id, name, lat, lng, radius
+        sheet.appendRow([
+            data.id, data.name, data.latitude, data.longitude, data.radius
+        ]);
+        response = { success: true, message: "تم إضافة الموقع بنجاح" };
+    }
     // 3. Save New Employee
     else if (data.action === "saveEmployee") {
         var sheet = ss.getSheetByName("employees");

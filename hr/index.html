@@ -213,6 +213,40 @@
         </div>
     </div>
 
+    <div id="siteModal" class="modal hidden">
+        <div class="modal-content">
+            <h3 style="margin-bottom:15px;">إضافة موقع عمل جديد</h3>
+            <div class="input-group">
+                <label>اسم الموقع</label>
+                <input type="text" id="siteName" placeholder="مثال: الفرع الرئيسي">
+            </div>
+            <div class="input-group">
+                <label>رابط خرائط جوجل (Google Maps Link)</label>
+                <input type="text" id="siteMapLink" placeholder="انسخ الرابط هنا..." oninput="parseMapLink()">
+                <small style="color:var(--text-muted); font-size:0.8rem;">سوف نحاول استخراج الإحداثيات من هذا الرابط تلقائياً.</small>
+            </div>
+            <div style="display:flex; gap:10px;">
+                <div class="input-group" style="flex:1;">
+                    <label>خط العرض (Lat)</label>
+                    <input type="text" id="siteLat" placeholder="تلقائي عبر الرابط">
+                </div>
+                <div class="input-group" style="flex:1;">
+                    <label>خط الطول (Lng)</label>
+                    <input type="text" id="siteLng" placeholder="تلقائي عبر الرابط">
+                </div>
+            </div>
+            <div class="input-group">
+                <label>نطاق الحضور المسموح (الـ Radius بالمتر)</label>
+                <input type="number" id="siteRadius" value="20">
+            </div>
+            
+            <div style="display:flex; gap:10px; margin-top:10px;">
+                <button class="btn-primary" onclick="saveSite()">حفظ الموقع</button>
+                <button class="btn-danger" style="background:transparent; border:1px solid var(--danger);" onclick="closeSiteModal()">إلغاء</button>
+            </div>
+        </div>
+    </div>
+
     <script src="app.js"></script>
 </body>
 </html>
