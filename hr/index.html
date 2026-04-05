@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لوحة تحكم الموارد البشرية | HR Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/global.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .dashboard-layout { display: flex; min-height: 100vh; }
+        .sidebar { width: 250px; background: rgba(15, 23, 42, 0.9); padding: 20px; border-left: 1px solid var(--card-border); }
+        .sidebar h2 { color: var(--secondary); margin-bottom: 30px; font-size: 1.5rem; text-align: center; }
+        .nav-link { display: block; padding: 12px 15px; color: var(--text-muted); text-decoration: none; border-radius: 8px; margin-bottom: 10px; transition: all 0.3s; cursor: pointer; }
+        .nav-link:hover, .nav-link.active { background: rgba(79, 70, 229, 0.2); color: var(--primary); }
+        .main-content { flex: 1; padding: 30px; overflow-y: auto; }
+        table { width: 100%; border-collapse: collapse; background: var(--card-bg); border-radius: 12px; overflow: hidden; }
+        th, td { padding: 15px; text-align: right; border-bottom: 1px solid var(--card-border); }
+        th { background: rgba(0,0,0,0.2); color: var(--text-muted); }
+        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        .modal-content { background: #1e293b; padding: 30px; border-radius: 16px; width: 90%; max-width: 500px; max-height:90vh; overflow-y:auto; }
+        .camera-box { width: 100%; background: #000; height: 250px; border-radius: 8px; margin-bottom: 15px; position:relative; display:flex; justify-content:center; overflow:hidden; }
+        #regVideo { width:100%; height:100%; object-fit:cover; }
+        #regCanvas { position:absolute; top:0; left:0; width:100%; height:100%; }
+        .filter-bar { display: flex; gap: 15px; margin-bottom: 20px; align-items: center; }
+        .filter-bar input, .filter-bar select { padding: 8px; border-radius: 6px; border: 1px solid var(--card-border); background: rgba(0,0,0,0.2); color: #fff; font-family: inherit;}
+        
+        /* Dashboard Charts & KPI */
+        .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .kpi-card { background: rgba(30, 41, 59, 0.8); border: 1px solid var(--card-border); padding: 20px; border-radius: 12px; text-align: center; }
+        .kpi-card h3 { color: var(--text-muted); font-size: 1rem; margin-bottom: 10px; }
+        .kpi-value { color: var(--primary); font-size: 2rem; font-weight: bold; }
+        .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
+        .chart-card { background: rgba(30, 41, 59, 0.8); border: 1px solid var(--card-border); padding: 20px; border-radius: 12px; }
+        @media (max-width: 768px) { .charts-grid { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+    
+    <!-- Login Section -->
+    <div id="hrLoginSection" class="landing-container fade-in">
+        <div class="glass-card" style="width:100%; max-width:400px;">
+            <h2 style="text-align:center; margin-bottom:20px;">تسجيل دخول الإدارة</h2>
+            <div class="input-group">
+                <label>البريد الإلكتروني لمدير الـ HR</label>
+                <input type="email" id="hrEmail" placeholder="admin@company.com">
+            </div>
+            <div class="input-group">
+                <label>كلمة المرور</label>
+                <input type="password" id="hrPass" placeholder="******">
+            </div>
+            <button class="btn-primary" onclick="loginHR()">دخول</button>
+            <div id="loginError" class="error-text hidden" style="margin-top:15px; padding:10px; text-align:center;"></div>
+        </div>
+    </div>
+
+    <!-- Dashboard Layout -->
+    <div id="dashboardSection" class="dashboard-layout hidden fade-in">
+        <div class="sidebar">
+            <h2>لوحة التحكم</h2>
+            <a class="nav-link active" onclick="showTab('attendance')">مراقبة الحضور اليومي</a>
+            <a class="nav-link" onclick="showTab('reports')">التقارير الشهرية</a>
+            <a class="nav-link" onclick="showTab('employees')">إدارة الموظفين</a>
+            <a class="nav-link" onclick="showTab('sites')">إدارة المواقع</a>
+            <a class="nav-link" onclick="logout()" style="color:var(--danger); margin-top:50px;">تسجيل خروج</a>
+        </div>
+        <div class="main-content">
+            
+            <div id="loader" class="loader hidden"></div>
+
+            <!-- Attendance Tab -->
+            <div id="tab-attendance" class="tab-content">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                    <h2>سجلات العمليات الشاملة</h2>
+                    <button class="btn-primary" style="width:auto;" onclick="fetchAttendance()">تحديث</button>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>الموظف</th>
+                            <th>الموقع</th>
+                            <th>وقت الحضور</th>
+                            <th>وقت الانصراف</th>
+                            <th>إجمالي الساعات</th>
+                            <th>الحالة</th>
+                        </tr>
+                    </thead>
+                    <tbody id="attendanceTableBody"></tbody>
+                </table>
+            </div>
+
+             <!-- Reports Tab -->
+             <div id="tab-reports" class="tab-content hidden">
+                <h2>التقرير الشهري للساعات والدوام</h2>
+                 <div class="filter-bar">
+                    <label>اختر الشهر:</label>
+                    <input type="month" id="reportMonth" onchange="generateReport()">
+                    <button class="btn-primary" style="width:auto; padding:8px 15px;" onclick="generateReport()">توليد التقرير</button>
+                    <button class="btn-primary" style="width:auto; padding:8px 15px; background:var(--secondary);" onclick="window.print()">طباعة</button>
+                </div>
+                
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <h3>إجمالي ساعات العمل</h3>
+                        <div class="kpi-value" id="kpiTotalHours">0</div>
+                    </div>
+                    <div class="kpi-card">
+                        <h3>عدد الموظفين الفعالين</h3>
+                        <div class="kpi-value" id="kpiActiveEmp">0</div>
+                    </div>
+                    <div class="kpi-card">
+                        <h3>إجمالي حالات التأخير</h3>
+                        <div class="kpi-value" id="kpiTotalLates">0</div>
+                    </div>
+                </div>
+
+                <div class="charts-grid">
+                    <div class="chart-card">
+                        <canvas id="hoursChart"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <canvas id="latesChart"></canvas>
+                    </div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID الموظف</th>
+                            <th>اسم الموظف</th>
+                            <th>أيام الحضور</th>
+                            <th>مرات التأخير</th>
+                            <th>إجمالي ساعات العمل</th>
+                        </tr>
+                    </thead>
+                    <tbody id="reportsTableBody"></tbody>
+                </table>
+            </div>
+
+            <!-- Employees Tab -->
+            <div id="tab-employees" class="tab-content hidden">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                    <h2>قائمة الموظفين</h2>
+                    <button class="btn-primary" style="width:auto; background:var(--secondary);" onclick="openEmployeeModal()">+ إضافة موظف</button>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>الاسم</th>
+                            <th>البريد</th>
+                            <th>رقم الجوال</th>
+                            <th>الدور</th>
+                            <th>بصمة الوجه</th>
+                        </tr>
+                    </thead>
+                    <tbody id="employeesTableBody"></tbody>
+                </table>
+            </div>
+
+            <!-- Sites Tab -->
+            <div id="tab-sites" class="tab-content hidden">
+                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                    <h2>مواقع العمل</h2>
+                    <button class="btn-primary" style="width:auto; background:var(--secondary);" onclick="openSiteModal()">+ إضافة موقع (سجل بشيت جوجل)</button>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>اسم الموقع</th>
+                            <th>خط العرض (Lat)</th>
+                            <th>خط الطول (Lng)</th>
+                            <th>النطاق (متر)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sitesTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div id="employeeModal" class="modal hidden">
+        <div class="modal-content">
+            <h3 style="margin-bottom:15px;">إضافة موظف يدوياً</h3>
+            <div class="input-group">
+                <label>الاسم</label>
+                <input type="text" id="empName">
+            </div>
+            <div class="input-group">
+                <label>الإيميل</label>
+                <input type="email" id="empEmail">
+            </div>
+            <div class="input-group">
+                <label>كلمة المرور المؤقتة</label>
+                <input type="text" id="empPass">
+            </div>
+            <div class="input-group">
+                <label>معرف المواقع (مفصولة بفاصلة)</label>
+                <input type="text" id="empSites" placeholder="مثال: site1,site2">
+            </div>
+            <div class="input-group">
+                <label>الدور</label>
+                <select id="empRole">
+                    <option value="employee">موظف (Employee)</option>
+                    <option value="hr">إدارة (HR)</option>
+                </select>
+            </div>
+            
+            <div style="display:flex; gap:10px;">
+                <button class="btn-primary" onclick="saveEmployee()">حفظ</button>
+                <button class="btn-danger" style="background:transparent; border:1px solid var(--danger);" onclick="closeEmployeeModal()">إلغاء</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

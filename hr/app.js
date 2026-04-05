@@ -1,0 +1,298 @@
+const API_URL = 'https://script.google.com/macros/s/AKfycbwNhaRKDP-7M4dXSQend8RbYPkXRgs5nzN0-BmNzxEO8IkBN9lt6KDtJCdOqpovhJEY1Q/exec';
+let hrSession = null;
+let allAttendanceData = [];
+let hoursChartInstance = null;
+let latesChartInstance = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+    // Set default month/year for reports to current month
+    const now = new Date();
+    document.getElementById('reportMonth').value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    checkSession();
+});
+
+function checkSession() {
+    const userJson = localStorage.getItem('hrSession');
+    if (userJson) {
+        hrSession = JSON.parse(userJson);
+        document.getElementById('hrLoginSection').classList.add('hidden');
+        document.getElementById('dashboardSection').classList.remove('hidden');
+        initDashboard();
+    }
+}
+
+async function loginHR() {
+    const email = document.getElementById('hrEmail').value.trim();
+    const pass = document.getElementById('hrPass').value.trim();
+    if (!email || !pass) return;
+
+    try {
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'login', email: email, password: pass, role: 'hr' }),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const result = await response.json();
+        
+        if (result.success) {
+            localStorage.setItem('hrSession', JSON.stringify(result.data));
+            checkSession();
+        } else {
+            document.getElementById('loginError').innerText = result.message || 'خطأ في بيانات الدخول أو لا تملك صلاحيات HR';
+            document.getElementById('loginError').classList.remove('hidden');
+        }
+    } catch (e) {
+        document.getElementById('loginError').innerText = 'فشل الاتصال بالخادم';
+        document.getElementById('loginError').classList.remove('hidden');
+    }
+}
+
+function logout() {
+    localStorage.removeItem('hrSession');
+    location.reload();
+}
+
+function showTab(tabName) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+    document.querySelectorAll('.nav-link').forEach(el => el.classList.remove('active'));
+    document.getElementById('tab-' + tabName).classList.remove('hidden');
+    event.currentTarget.classList.add('active');
+    
+    if (tabName === 'attendance') fetchAttendance();
+    if (tabName === 'employees') fetchEmployees();
+    if (tabName === 'sites') fetchSites();
+    if (tabName === 'reports') generateReport();
+}
+
+async function initDashboard() {
+    fetchAttendance();
+}
+
+async function fetchAttendance() {
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const res = await fetch(`${API_URL}?action=getAttendance`);
+        const result = await res.json();
+        if(result.success) {
+            allAttendanceData = result.data;
+            renderAttendanceTable(allAttendanceData);
+        }
+    } catch(e) { console.error(e); }
+    document.getElementById('loader').classList.add('hidden');
+}
+
+function renderAttendanceTable(data) {
+    const tbody = document.getElementById('attendanceTableBody');
+    tbody.innerHTML = '';
+    // Reverse to show newest first
+    [...data].reverse().forEach(record => {
+        const checkInTime = new Date(record.checkIn).toLocaleString('ar-EG');
+        const checkOutTime = record.checkOut ? new Date(record.checkOut).toLocaleString('ar-EG') : 'لم ينصرف بعد';
+        tbody.innerHTML += `
+            <tr>
+                <td>${record.employeeName}</td>
+                <td>${record.siteName}</td>
+                <td dir="ltr" style="text-align:right">${checkInTime}</td>
+                <td dir="ltr" style="text-align:right">${checkOutTime}</td>
+                <td>${record.totalHours ? record.totalHours + ' ساعات' : '-'}</td>
+                <td><span style="color:${record.status==='late'?'var(--danger)':'var(--secondary)'}">${record.status==='late'?'متأخر':'حاضر'}</span></td>
+            </tr>
+        `;
+    });
+}
+
+// Reports Logic
+function generateReport() {
+    const monthVal = document.getElementById('reportMonth').value; // YYYY-MM
+    if(!monthVal || allAttendanceData.length === 0) return;
+    
+    const targetYear = parseInt(monthVal.split('-')[0]);
+    const targetMonth = parseInt(monthVal.split('-')[1]) - 1; // 0-based
+
+    // Filter records for the month
+    const filtered = allAttendanceData.filter(record => {
+        const d = new Date(record.checkIn);
+        return d.getFullYear() === targetYear && d.getMonth() === targetMonth;
+    });
+
+    const reportAcc = {};
+
+    filtered.forEach(record => {
+        if(!reportAcc[record.employeeId]) {
+             reportAcc[record.employeeId] = {
+                 name: record.employeeName,
+                 daysPresent: 0,
+                 lates: 0,
+                 totalHours: 0
+             };
+        }
+        
+        reportAcc[record.employeeId].daysPresent += 1;
+        if(record.status === 'late') reportAcc[record.employeeId].lates += 1;
+        if(record.totalHours) reportAcc[record.employeeId].totalHours += parseFloat(record.totalHours);
+    });
+
+    let kpiTotalHours = 0;
+    let kpiTotalLates = 0;
+    let kpiActiveEmp = Object.keys(reportAcc).length;
+
+    const names = [];
+    const hours = [];
+    const lates = [];
+
+    const tbody = document.getElementById('reportsTableBody');
+    tbody.innerHTML = '';
+    
+    for (const [empId, data] of Object.entries(reportAcc)) {
+        kpiTotalHours += data.totalHours;
+        kpiTotalLates += data.lates;
+        
+        names.push(data.name);
+        hours.push((data.totalHours).toFixed(2));
+        lates.push(data.lates);
+
+        tbody.innerHTML += `
+            <tr>
+                <td>${empId}</td>
+                <td>${data.name}</td>
+                <td>${data.daysPresent} أيام</td>
+                <td><span style="color:${data.lates > 0 ? 'var(--danger)' : 'inherit'}">${data.lates} مرات</span></td>
+                <td>${data.totalHours.toFixed(2)} ساعات</td>
+            </tr>
+        `;
+    }
+
+    document.getElementById('kpiTotalHours').innerText = kpiTotalHours.toFixed(2);
+    document.getElementById('kpiTotalLates').innerText = kpiTotalLates;
+    document.getElementById('kpiActiveEmp').innerText = kpiActiveEmp;
+
+    updateCharts(names, hours, lates);
+}
+
+function updateCharts(labels, hoursData, latesData) {
+    const ctxHours = document.getElementById('hoursChart').getContext('2d');
+    const ctxLates = document.getElementById('latesChart').getContext('2d');
+
+    if(hoursChartInstance) hoursChartInstance.destroy();
+    if(latesChartInstance) latesChartInstance.destroy();
+
+    Chart.defaults.color = '#94a3b8';
+    Chart.defaults.font.family = 'Tajawal';
+
+    hoursChartInstance = new Chart(ctxHours, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'إجمالي الساعات',
+                data: hoursData,
+                backgroundColor: 'rgba(79, 70, 229, 0.7)',
+                borderColor: 'rgba(79, 70, 229, 1)',
+                borderWidth: 1,
+                borderRadius: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { title: { display: true, text: 'ساعات العمل لكل موظف' } }
+        }
+    });
+
+    latesChartInstance = new Chart(ctxLates, {
+        type: 'doughnut',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'مرات التأخير',
+                data: latesData,
+                backgroundColor: [
+                    '#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6', '#d946ef'
+                ],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { title: { display: true, text: 'نسبة التأخير بين الموظفين' } }
+        }
+    });
+}
+
+async function fetchEmployees() {
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const res = await fetch(`${API_URL}?action=getEmployees`);
+        const result = await res.json();
+        if(result.success) {
+            const tbody = document.getElementById('employeesTableBody');
+            tbody.innerHTML = '';
+            result.data.forEach(record => {
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${record.name}</td>
+                        <td>${record.email}</td>
+                        <td>${record.phone || '-'}</td>
+                        <td>${record.role}</td>
+                        <td>${record.faceDescriptor ? '✔️ مسجل' : '❌ لا يوجد'}</td>
+                    </tr>
+                `;
+            });
+        }
+    } catch(e) {}
+    document.getElementById('loader').classList.add('hidden');
+}
+
+async function fetchSites() {
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const res = await fetch(`${API_URL}?action=getSites`);
+        const result = await res.json();
+        if(result.success) {
+            const tbody = document.getElementById('sitesTableBody');
+            tbody.innerHTML = '';
+            result.data.forEach(record => {
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${record.name}</td>
+                        <td>${record.latitude}</td>
+                        <td>${record.longitude}</td>
+                        <td>${record.radius} متر</td>
+                    </tr>
+                `;
+            });
+        }
+    } catch(e) {}
+    document.getElementById('loader').classList.add('hidden');
+}
+
+function openEmployeeModal() { document.getElementById('employeeModal').classList.remove('hidden'); }
+function closeEmployeeModal() { document.getElementById('employeeModal').classList.add('hidden'); }
+
+async function saveEmployee() {
+    const newId = 'EMP' + Math.floor(1000 + Math.random() * 9000);
+    const name = document.getElementById('empName').value;
+    const email = document.getElementById('empEmail').value;
+    const pass = document.getElementById('empPass').value;
+    const role = document.getElementById('empRole').value;
+    const sites = document.getElementById('empSites').value;
+    
+    if(!name || !email || !pass) return alert("أكمل البيانات");
+    
+    const payload = {
+        action: 'saveEmployee',
+        id: newId, name: name, email: email, password: pass, phone: "", role: role, assignedSites: sites, faceDescriptor: ""
+    };
+    
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers:{'Content-Type':'text/plain'} });
+        const result = await res.json();
+        if(result.success) {
+            closeEmployeeModal();
+            fetchEmployees();
+        } else alert("خطأ في الحفظ");
+    } catch(e) {}
+    document.getElementById('loader').classList.add('hidden');
+}
+
+function openSiteModal() { alert('الرجاء إضافة المواقع مباشرة من Google Sheets في ورقة sites.'); }
