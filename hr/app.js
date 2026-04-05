@@ -26,6 +26,9 @@ async function loginHR() {
     const pass = document.getElementById('hrPass').value.trim();
     if (!email || !pass) return;
 
+    const btn = document.querySelector('#hrLoginSection .auth-form button');
+    if (btn) btn.innerText = 'جاري التحقق...';
+
     try {
         const response = await fetch(API_URL, {
             method: 'POST',
@@ -42,9 +45,11 @@ async function loginHR() {
             document.getElementById('loginError').classList.remove('hidden');
         }
     } catch (e) {
-        document.getElementById('loginError').innerText = 'فشل الاتصال بالخادم';
+        document.getElementById('loginError').innerText = 'فشل الاتصال بالخادم: ' + e.message;
         document.getElementById('loginError').classList.remove('hidden');
+        console.error(e);
     }
+    if (btn) btn.innerText = 'دخول';
 }
 
 function logout() {
@@ -290,8 +295,11 @@ async function saveEmployee() {
         if(result.success) {
             closeEmployeeModal();
             fetchEmployees();
-        } else alert("خطأ في الحفظ");
-    } catch(e) {}
+        } else alert("خطأ في الحفظ: " + result.message);
+    } catch(e) {
+        console.error(e);
+        alert("خطأ في الاتصال: " + e.message);
+    }
     document.getElementById('loader').classList.add('hidden');
 }
 

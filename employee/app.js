@@ -52,7 +52,8 @@ async function login() {
             showError('loginError', result.message || 'البريد أو كلمة المرور غير صحيحة');
         }
     } catch (e) {
-        showError('loginError', 'فشل الاتصال بالخادم');
+        showError('loginError', 'فشل الاتصال بالخادم: ' + e.message);
+        console.error(e);
     }
     document.querySelector('#loginSection button').innerText = 'دخول';
 }
@@ -74,7 +75,8 @@ async function requestOTP() {
            showError('otpError', result.message);
        }
     } catch(e) {
-        showError('otpError', 'خطأ في الشبكة');
+        showError('otpError', 'خطأ في الشبكة: ' + e.message);
+        console.error(e);
     }
     document.getElementById('btnRequestOTP').innerText = 'إرسال كود التحقق';
 }
@@ -97,7 +99,8 @@ async function verifyOTP() {
            showError('verifyError', result.message);
        }
     } catch(e) {
-        showError('verifyError', 'خطأ في الشبكة');
+        showError('verifyError', 'خطأ في الشبكة: ' + e.message);
+        console.error(e);
     }
     document.getElementById('btnVerifyOTP').innerText = 'تأكيد الرمز';
 }
@@ -326,7 +329,7 @@ async function handleCheckIn() {
         const result = await res.json();
         if(result.success) alert(result.message);
         else alert('عفواً: ' + result.message);
-    } catch(e) { alert('حدث خطأ في الشبكة'); }
+    } catch(e) { console.error(e); alert('حدث خطأ في الشبكة: ' + e.message); }
     document.getElementById('loader').classList.add('hidden');
 }
 
@@ -345,7 +348,7 @@ async function handleCheckOut() {
         const result = await res.json();
         if(result.success) alert(result.message);
         else alert('خطأ: ' + result.message);
-    } catch(e) { alert('حدث خطأ في الشبكة'); }
+    } catch(e) { console.error(e); alert('حدث خطأ في الشبكة: ' + e.message); }
     document.getElementById('loader').classList.add('hidden');
 }
 
