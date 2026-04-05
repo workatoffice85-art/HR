@@ -9,31 +9,23 @@
     <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        .dashboard-layout { display: flex; min-height: 100vh; }
-        .sidebar { width: 250px; background: rgba(15, 23, 42, 0.9); padding: 20px; border-left: 1px solid var(--card-border); }
-        .sidebar h2 { color: var(--secondary); margin-bottom: 30px; font-size: 1.5rem; text-align: center; }
-        .nav-link { display: block; padding: 12px 15px; color: var(--text-muted); text-decoration: none; border-radius: 8px; margin-bottom: 10px; transition: all 0.3s; cursor: pointer; }
-        .nav-link:hover, .nav-link.active { background: rgba(79, 70, 229, 0.2); color: var(--primary); }
-        .main-content { flex: 1; padding: 30px; overflow-y: auto; }
-        table { width: 100%; border-collapse: collapse; background: var(--card-bg); border-radius: 12px; overflow: hidden; }
-        th, td { padding: 15px; text-align: right; border-bottom: 1px solid var(--card-border); }
-        th { background: rgba(0,0,0,0.2); color: var(--text-muted); }
-        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 1000; }
-        .modal-content { background: #1e293b; padding: 30px; border-radius: 16px; width: 90%; max-width: 500px; max-height:90vh; overflow-y:auto; }
-        .camera-box { width: 100%; background: #000; height: 250px; border-radius: 8px; margin-bottom: 15px; position:relative; display:flex; justify-content:center; overflow:hidden; }
-        #regVideo { width:100%; height:100%; object-fit:cover; }
-        #regCanvas { position:absolute; top:0; left:0; width:100%; height:100%; }
-        .filter-bar { display: flex; gap: 15px; margin-bottom: 20px; align-items: center; }
-        .filter-bar input, .filter-bar select { padding: 8px; border-radius: 6px; border: 1px solid var(--card-border); background: rgba(0,0,0,0.2); color: #fff; font-family: inherit;}
-        
-        /* Dashboard Charts & KPI */
-        .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }
-        .kpi-card { background: rgba(30, 41, 59, 0.8); border: 1px solid var(--card-border); padding: 20px; border-radius: 12px; text-align: center; }
-        .kpi-card h3 { color: var(--text-muted); font-size: 1rem; margin-bottom: 10px; }
-        .kpi-value { color: var(--primary); font-size: 2rem; font-weight: bold; }
         .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
         .chart-card { background: rgba(30, 41, 59, 0.8); border: 1px solid var(--card-border); padding: 20px; border-radius: 12px; }
-        @media (max-width: 768px) { .charts-grid { grid-template-columns: 1fr; } }
+        
+        .table-responsive { width: 100%; overflow-x: auto; background: var(--card-bg); border-radius: 12px; border: 1px solid var(--card-border); margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; min-width: 600px; }
+
+        @media (max-width: 768px) {
+            .dashboard-layout { flex-direction: column; }
+            .sidebar { width: 100%; border-left: none; border-bottom: 1px solid var(--card-border); padding: 10px 20px; display: flex; flex-direction: row; overflow-x: auto; gap: 10px; align-items: center; white-space: nowrap; }
+            .sidebar h2 { display: none; }
+            .nav-link { margin-bottom: 0; padding: 8px 15px; font-size: 0.9rem; }
+            .nav-link:last-child { margin-top: 0 !important; }
+            .main-content { padding: 15px; }
+            .charts-grid { grid-template-columns: 1fr; }
+            .filter-bar { flex-direction: column; align-items: stretch; gap: 10px; }
+            .kpi-grid { grid-template-columns: 1fr; }
+        }
     </style>
 </head>
 <body>
@@ -78,19 +70,21 @@
                     <h2>سجلات العمليات الشاملة</h2>
                     <button class="btn-primary" style="width:auto;" onclick="fetchAttendance()">تحديث</button>
                 </div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>الموظف</th>
-                            <th>الموقع</th>
-                            <th>وقت الحضور</th>
-                            <th>وقت الانصراف</th>
-                            <th>إجمالي الساعات</th>
-                            <th>الحالة</th>
-                        </tr>
-                    </thead>
-                    <tbody id="attendanceTableBody"></tbody>
-                </table>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>الموظف</th>
+                                <th>الموقع</th>
+                                <th>وقت الحضور</th>
+                                <th>وقت الانصراف</th>
+                                <th>إجمالي الساعات</th>
+                                <th>الحالة</th>
+                            </tr>
+                        </thead>
+                        <tbody id="attendanceTableBody"></tbody>
+                    </table>
+                </div>
             </div>
 
              <!-- Reports Tab -->
@@ -119,19 +113,21 @@
                         <canvas id="hoursChart"></canvas>
                     </div>
                 </div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>ID الموظف</th>
-                            <th>اسم الموظف</th>
-                            <th>أيام الحضور</th>
-                            <th>أيام الغياب</th>
-                            <th>العمل الإضافي</th>
-                            <th>إجمالي الساعات</th>
-                        </tr>
-                    </thead>
-                    <tbody id="reportsTableBody"></tbody>
-                </table>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID الموظف</th>
+                                <th>اسم الموظف</th>
+                                <th>أيام الحضور</th>
+                                <th>أيام الغياب</th>
+                                <th>العمل الإضافي</th>
+                                <th>إجمالي الساعات</th>
+                            </tr>
+                        </thead>
+                        <tbody id="reportsTableBody"></tbody>
+                    </table>
+                </div>
             </div>
 
             <!-- Employees Tab -->
@@ -140,19 +136,21 @@
                     <h2>قائمة الموظفين</h2>
                     <button class="btn-primary" style="width:auto; background:var(--secondary);" onclick="openEmployeeModal()">+ إضافة موظف</button>
                 </div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th style="padding: 15px;">الاسم</th>
-                            <th style="padding: 15px;">البريد</th>
-                            <th style="padding: 15px;">الهاتف</th>
-                            <th style="padding: 15px;">الصلاحية</th>
-                            <th style="padding: 15px;">البصمة</th>
-                            <th style="padding: 15px;">الإجراءات</th>
-                        </tr>
-                    </thead>
-                    <tbody id="employeesTableBody"></tbody>
-                </table>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="padding: 15px;">الاسم</th>
+                                <th style="padding: 15px;">البريد</th>
+                                <th style="padding: 15px;">الهاتف</th>
+                                <th style="padding: 15px;">الصلاحية</th>
+                                <th style="padding: 15px;">البصمة</th>
+                                <th style="padding: 15px;">الإجراءات</th>
+                            </tr>
+                        </thead>
+                        <tbody id="employeesTableBody"></tbody>
+                    </table>
+                </div>
             </div>
 
             <!-- Sites Tab -->
@@ -161,18 +159,20 @@
                     <h2>مواقع العمل</h2>
                     <button class="btn-primary" style="width:auto; background:var(--secondary);" onclick="openSiteModal()">+ إضافة موقع (سجل بشيت جوجل)</button>
                 </div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th style="padding: 15px;">اسم الموقع</th>
-                            <th style="padding: 15px;">خط العرض (Lat)</th>
-                            <th style="padding: 15px;">خط الطول (Lng)</th>
-                            <th style="padding: 15px;">النطاق (متر)</th>
-                            <th style="padding: 15px;">الإجراءات</th>
-                        </tr>
-                    </thead>
-                    <tbody id="sitesTableBody"></tbody>
-                </table>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="padding: 15px;">اسم الموقع</th>
+                                <th style="padding: 15px;">خط العرض (Lat)</th>
+                                <th style="padding: 15px;">خط الطول (Lng)</th>
+                                <th style="padding: 15px;">النطاق (متر)</th>
+                                <th style="padding: 15px;">الإجراءات</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sitesTableBody"></tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
