@@ -588,9 +588,9 @@ function renderMyReports(data, monthStr) {
         }
     });
 
-    const totalAbsent = workingDaysPassed.length - presentRecords.length;
+    const totalAbsent = workingDaysPassed.length - presentDates.size;
 
-    document.getElementById('empTotalPresent').innerText = presentRecords.length;
+    document.getElementById('empTotalPresent').innerText = presentDates.size; // Use size of unique dates set
     document.getElementById('empTotalAbsent').innerText = totalAbsent > 0 ? totalAbsent : 0;
     document.getElementById('empTotalLates').innerText = totalLates;
     document.getElementById('empTotalHours').innerText = totalHours.toFixed(2);

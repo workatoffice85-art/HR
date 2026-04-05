@@ -137,9 +137,13 @@ function generateReport() {
     const reportAcc = {};
 
     filtered.forEach(record => {
-        if(!reportAcc[record.employeeId]) {
-             reportAcc[record.employeeId] = {
+        const empId = record.employeeId;
+        const recordDate = new Date(record.checkIn).toDateString(); // YYYY-MM-DD unique string
+        
+        if(!reportAcc[empId]) {
+             reportAcc[empId] = {
                  name: record.employeeName,
+                 uniqueDates: new Set(),
                  daysPresent: 0,
                  lates: 0,
                  overtime: 0,
@@ -147,10 +151,16 @@ function generateReport() {
              };
         }
         
-        reportAcc[record.employeeId].daysPresent += 1;
-        if(record.status === 'late') reportAcc[record.employeeId].lates += 1;
-        if(record.status === 'overtime') reportAcc[record.employeeId].overtime += 1;
-        if(record.totalHours) reportAcc[record.employeeId].totalHours += parseFloat(record.totalHours);
+        const empStats = reportAcc[empId];
+        
+        if (!empStats.uniqueDates.has(recordDate)) {
+            empStats.uniqueDates.add(recordDate);
+            empStats.daysPresent += 1;
+        }
+
+        if(record.status === 'late') empStats.lates += 1;
+        if(record.status === 'overtime') empStats.overtime += 1;
+        if(record.totalHours) empStats.totalHours += parseFloat(record.totalHours);
     });
 
     let kpiTotalHours = 0;
