@@ -185,29 +185,55 @@ function logout() {
 }
 
 async function initSystem() {
-    setStatus('جاري تحميل بيانات المواقع والنماذج...', 'text-muted');
+    setStatus('جاري تحميل بيانات المواقع...', 'text-muted');
     
+    // Step 1: Load Sites
     try {
         const response = await fetch(`${API_URL}?action=getSites`);
         const result = await response.json();
-        if(result.success) sitesData = result.data;
+        if (result.success) {
+            sitesData = result.data;
+            setStatus(`✅ تم تحميل ${sitesData.length} موقع. جاري تحميل نماذج الوجه...`, 'text-muted');
+        } else {
+            setStatus('⚠️ تحذير: فشل تحميل المواقع: ' + result.message, 'error-text');
+        }
+    } catch(e) {
+        setStatus('❌ خطأ في تحميل المواقع: ' + e.message, 'error-text');
+        console.error('Sites load error:', e);
+    }
 
+    // Step 2: Load Face Models
+    try {
+        setStatus('جاري تحميل نموذج التعرف على الوجه (1/3)...', 'text-muted');
         await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
+        setStatus('جاري تحميل نموذج الوجه (2/3)...', 'text-muted');
         await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+        setStatus('جاري تحميل نموذج الوجه (3/3)...', 'text-muted');
         await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+    } catch(e) {
+        setStatus('❌ خطأ في تحميل نماذج الوجه: ' + e.message, 'error-text');
+        console.error('Face model load error:', e);
+        return;
+    }
 
-        if (currentUser.faceDescriptor) {
+    // Step 3: Setup Face Matcher
+    if (currentUser.faceDescriptor) {
+        try {
             const descArray = new Float32Array(JSON.parse(currentUser.faceDescriptor));
             const labeledDescriptor = new faceapi.LabeledFaceDescriptors(currentUser.name, [descArray]);
             faceMatcher = new faceapi.FaceMatcher([labeledDescriptor], 0.6);
+            setStatus('✅ النظام جاهز. وجّه الكاميرا إليك...', 'success-text');
+        } catch(e) {
+            setStatus('⚠️ خطأ في بصمة الوجه تأكد من تسجيل بصمتك أولاً.', 'error-text');
+            console.error('Face matcher error:', e);
         }
-
-        startVideo();
-        getLocation();
-
-    } catch(e) {
-        setStatus('خطأ في تهيئة النظام: ' + e.message, 'error-text');
+    } else {
+        setStatus('⚠️ لم يتم تسجيل بصمة وجه بعد. وجّه الكاميرا إليك...', 'text-muted');
     }
+
+    // Step 4: Start Camera & GPS
+    startVideo();
+    getLocation();
 }
 
 function setStatus(msg, className) {
