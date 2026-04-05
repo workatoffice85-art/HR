@@ -458,6 +458,7 @@ async function handleCheckOut() {
 // ------ SITE REQUEST LOGIC ------ //
 function openRequestModal() {
     document.getElementById('requestSiteModal').classList.remove('hidden');
+    document.getElementById('requestSiteCard').classList.remove('hidden'); // Ensure inner card is visible
     document.getElementById('suggestedSiteName').value = '';
 }
 
