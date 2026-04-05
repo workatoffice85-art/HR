@@ -1,6 +1,8 @@
 const API_URL = 'https://script.google.com/macros/s/AKfycbwNhaRKDP-7M4dXSQend8RbYPkXRgs5nzN0-BmNzxEO8IkBN9lt6KDtJCdOqpovhJEY1Q/exec';
 let hrSession = null;
 let allAttendanceData = [];
+let allEmployees = []; // Added here
+let allSites = [];    // Added here
 let hoursChartInstance = null;
 let latesChartInstance = null;
 
@@ -253,35 +255,37 @@ async function fetchEmployees() {
 }
 
 async function fetchSites() {
+    console.log("Fetching sites...");
     document.getElementById('loader').classList.remove('hidden');
     try {
         const res = await fetch(`${API_URL}?action=getSites`);
         const result = await res.json();
+        console.log("Sites result:", result);
         if(result.success) {
-            allSites = result.data; // Store for editing
+            allSites = result.data;
             const tbody = document.getElementById('sitesTableBody');
             tbody.innerHTML = '';
             result.data.forEach(record => {
-                tbody.innerHTML += `
-                    <tr>
-                        <td>${record.name}</td>
-                        <td>${record.latitude}</td>
-                        <td>${record.longitude}</td>
-                        <td>${record.radius} متر</td>
-                        <td>
-                            <button class="btn-primary" style="padding:5px 10px; font-size:0.8rem;" onclick="editSite('${record.id}')">تعديل</button>
-                            <button class="btn-danger" style="padding:5px 10px; font-size:0.8rem; background:transparent; border:1px solid var(--danger); color:var(--danger);" onclick="deleteEntity('deleteSite', '${record.id}', '${record.name}')">حذف</button>
-                        </td>
-                    </tr>
+                console.log("Rendering site record:", record);
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${record.name}</td>
+                    <td>${record.latitude}</td>
+                    <td>${record.longitude}</td>
+                    <td>${record.radius} متر</td>
+                    <td style="display:flex; gap:8px; justify-content:center; padding:10px;">
+                        <button class="btn-primary" style="padding:5px 12px; font-size:0.85rem; width:auto;" onclick="editSite('${record.id}')">تعديل ✏️</button>
+                        <button class="btn-danger" style="padding:5px 12px; font-size:0.85rem; width:auto; background:rgba(239,68,68,0.1); border:1px solid var(--danger); color:var(--danger);" onclick="deleteEntity('deleteSite', '${record.id}', '${record.name}')">حذف 🗑️</button>
+                    </td>
                 `;
+                tbody.appendChild(row);
             });
         }
-    } catch(e) { console.error(e); }
+    } catch(e) { 
+        console.error("Fetch Sites Error:", e);
+    }
     document.getElementById('loader').classList.add('hidden');
 }
-
-let allEmployees = [];
-let allSites = [];
 
 function editEmployee(id) {
     const emp = allEmployees.find(e => String(e.id) === String(id));
