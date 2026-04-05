@@ -158,8 +158,15 @@ async function completeRegistration() {
         if(result.success) {
             alert('تم إنشاء الحساب بنجاح، سجل دخول الآن');
             location.reload();
-        } else showError('regError', result.message);
-    } catch(e) { showError('regError', 'حدث خطأ'); }
+        } else {
+            showError('regError', result.message);
+            document.getElementById('btnCompleteReg').innerText = 'إنشاء الحساب';
+        }
+    } catch(e) {
+        showError('regError', 'حدث خطأ: ' + e.message);
+        console.error(e);
+        document.getElementById('btnCompleteReg').innerText = 'إنشاء الحساب';
+    }
 }
 
 function showError(elId, msg) {
