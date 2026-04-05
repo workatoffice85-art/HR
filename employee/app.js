@@ -524,9 +524,7 @@ function renderMyReports(data, monthStr) {
 
     // Create a set of dates where user was present for quick lookup
     const presentDates = new Set(presentRecords.map(r => new Date(r.checkIn).toDateString()));
-    const lateDates = new Set(presentRecords.filter(r => r.status === 'late').map(r => new Date(r.checkIn).toDateString()));
 
-    let totalLates = lateDates.size; // Only count one late per unique date
     const fullReport = [];
 
     // Add Present Records
@@ -560,10 +558,7 @@ function renderMyReports(data, monthStr) {
             let statusText = 'حاضر';
             let statusColor = 'var(--secondary)';
             
-            if (item.status === 'late') {
-                statusText = 'متأخر';
-                statusColor = 'var(--danger)';
-            } else if (item.status === 'overtime') {
+            if (item.status === 'overtime') {
                 statusText = 'عمل إضافي';
                 statusColor = '#3b82f6'; // Bright Blue
             }
@@ -592,6 +587,5 @@ function renderMyReports(data, monthStr) {
 
     document.getElementById('empTotalPresent').innerText = presentDates.size; // Use size of unique dates set
     document.getElementById('empTotalAbsent').innerText = totalAbsent > 0 ? totalAbsent : 0;
-    document.getElementById('empTotalLates').innerText = totalLates;
     document.getElementById('empTotalHours').innerText = totalHours.toFixed(2);
 }
