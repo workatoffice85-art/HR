@@ -79,19 +79,21 @@
                     <h2>سجلات العمليات الشاملة</h2>
                     <button class="btn-primary" style="width:auto;" onclick="fetchAttendance()">تحديث</button>
                 </div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>الموظف</th>
-                            <th>الموقع</th>
-                            <th>وقت الحضور</th>
-                            <th>وقت الانصراف</th>
-                            <th>إجمالي الساعات</th>
-                            <th>الحالة</th>
-                        </tr>
-                    </thead>
-                    <tbody id="attendanceTableBody"></tbody>
-                </table>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>الموظف</th>
+                                <th>الموقع</th>
+                                <th>وقت الحضور</th>
+                                <th>وقت الانصراف</th>
+                                <th>إجمالي الساعات</th>
+                                <th>الحالة</th>
+                            </tr>
+                        </thead>
+                        <tbody id="attendanceTableBody"></tbody>
+                    </table>
+                </div>
             </div>
 
              <!-- Reports Tab -->
@@ -127,20 +129,22 @@
                         <canvas id="latesChart"></canvas>
                     </div>
                 </div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>ID الموظف</th>
-                            <th>اسم الموظف</th>
-                            <th>أيام الحضور</th>
-                            <th>أيام الغياب</th>
-                            <th>التأخير</th>
-                            <th>العمل الإضافي</th>
-                            <th>إجمالي الساعات</th>
-                        </tr>
-                    </thead>
-                    <tbody id="reportsTableBody"></tbody>
-                </table>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID الموظف</th>
+                                <th>اسم الموظف</th>
+                                <th>أيام الحضور</th>
+                                <th>أيام الغياب</th>
+                                <th>التأخير</th>
+                                <th>العمل الإضافي</th>
+                                <th>إجمالي الساعات</th>
+                            </tr>
+                        </thead>
+                        <tbody id="reportsTableBody"></tbody>
+                    </table>
+                </div>
             </div>
 
             <!-- Employees Tab -->
@@ -149,19 +153,21 @@
                     <h2>قائمة الموظفين</h2>
                     <button class="btn-primary" style="width:auto; background:var(--secondary);" onclick="openEmployeeModal()">+ إضافة موظف</button>
                 </div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th style="padding: 15px;">الاسم</th>
-                            <th style="padding: 15px;">البريد</th>
-                            <th style="padding: 15px;">الهاتف</th>
-                            <th style="padding: 15px;">الصلاحية</th>
-                            <th style="padding: 15px;">البصمة</th>
-                            <th style="padding: 15px;">الإجراءات</th>
-                        </tr>
-                    </thead>
-                    <tbody id="employeesTableBody"></tbody>
-                </table>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="padding: 15px;">الاسم</th>
+                                <th style="padding: 15px;">البريد</th>
+                                <th style="padding: 15px;">الهاتف</th>
+                                <th style="padding: 15px;">الصلاحية</th>
+                                <th style="padding: 15px;">البصمة</th>
+                                <th style="padding: 15px;">الإجراءات</th>
+                            </tr>
+                        </thead>
+                        <tbody id="employeesTableBody"></tbody>
+                    </table>
+                </div>
             </div>
 
             <!-- Sites Tab -->
@@ -170,18 +176,20 @@
                     <h2>مواقع العمل</h2>
                     <button class="btn-primary" style="width:auto; background:var(--secondary);" onclick="openSiteModal()">+ إضافة موقع (سجل بشيت جوجل)</button>
                 </div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th style="padding: 15px;">اسم الموقع</th>
-                            <th style="padding: 15px;">خط العرض (Lat)</th>
-                            <th style="padding: 15px;">خط الطول (Lng)</th>
-                            <th style="padding: 15px;">النطاق (متر)</th>
-                            <th style="padding: 15px;">الإجراءات</th>
-                        </tr>
-                    </thead>
-                    <tbody id="sitesTableBody"></tbody>
-                </table>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="padding: 15px;">اسم الموقع</th>
+                                <th style="padding: 15px;">خط العرض (Lat)</th>
+                                <th style="padding: 15px;">خط الطول (Lng)</th>
+                                <th style="padding: 15px;">النطاق (متر)</th>
+                                <th style="padding: 15px;">الإجراءات</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sitesTableBody"></tbody>
+                    </table>
+                </div>
             </div>
 
             <!-- Settings Tab -->

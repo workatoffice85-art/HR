@@ -303,6 +303,34 @@ body {
     }
 }
 
+.table-container {
+    width: 100%;
+    overflow-x: auto;
+    background: rgba(30, 41, 59, 0.4);
+    border-radius: 16px;
+    border: 1px solid var(--card-border);
+    margin-top: 15px;
+    -webkit-overflow-scrolling: touch;
+}
+
+.table-container table {
+    min-width: 700px; /* Ensures all columns are accessible via scroll */
+    width: 100%;
+    border-collapse: collapse;
+}
+
+/* Custom Scrollbar for the table container */
+.table-container::-webkit-scrollbar {
+    height: 6px;
+}
+.table-container::-webkit-scrollbar-track {
+    background: rgba(255,255,255,0.05);
+}
+.table-container::-webkit-scrollbar-thumb {
+    background: var(--primary);
+    border-radius: 10px;
+}
+
 .sidebar-overlay {
     position: fixed;
     top: 0;

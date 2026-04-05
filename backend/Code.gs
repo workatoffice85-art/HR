@@ -228,11 +228,12 @@ function doPost(e) {
        var code = Math.floor(1000 + Math.random() * 9000).toString();
        CacheService.getScriptCache().put(data.email, code, 600); // 10 minutes cache
        
-       MailApp.sendEmail({
-        to: data.email,
-        subject: "رمز التحقق لتسجيل المستخد الجديد",
-        body: "مرحبا،\n\nرمز التحقق الخاص بك هو: " + code + "\nالرمز صالح لمدة 10 دقائق."
-       });
+       // Use GmailApp instead of MailApp for better Outlook deliverability
+       // Also adding a sender name
+       GmailApp.sendEmail(data.email, "رمز التحقق لتسجيل المستخد الجديد", 
+         "مرحبا،\n\nرمز التحقق الخاص بك هو: " + code + "\nالرمز صالح لمدة 10 دقائق.",
+         { name: "نظام إدارة الموارد البشرية (HR System)" }
+       );
        return json({ success: true, message: "تم إرسال رمز التحقق" });
     }
     
