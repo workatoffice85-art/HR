@@ -115,13 +115,19 @@
                 <canvas id="overlay"></canvas>
             </div>
             
-            <div id="statusMessage">جاري تهيئة الكاميرا والنظام...</div>
+            <div id="statusMessage">جاري تهيئة النظام...</div>
+
+            <!-- Timer Display -->
+            <div id="timerContainer" class="hidden" style="margin-bottom: 20px; background: rgba(59, 130, 246, 0.1); padding: 15px; border-radius: 12px; border: 1px solid rgba(59, 130, 246, 0.3);">
+                <div style="font-size: 0.9rem; color: var(--secondary); margin-bottom: 5px;">وقت العمل الحالي</div>
+                <div id="workTimer" style="font-size: 2.2rem; font-weight: bold; font-family: monospace; letter-spacing: 2px;">00:00:00</div>
+            </div>
 
             <div class="action-buttons">
-                <button id="btnCheckIn" class="action-btn check-in-btn" disabled onclick="handleCheckIn()">
+                <button id="btnCheckIn" class="action-btn check-in-btn hidden" disabled onclick="handleCheckIn()">
                     تسجيل حضور
                 </button>
-                <button id="btnCheckOut" class="action-btn check-out-btn" disabled onclick="handleCheckOut()">
+                <button id="btnCheckOut" class="action-btn check-out-btn hidden" disabled onclick="handleCheckOut()">
                     تسجيل انصراف
                 </button>
             </div>

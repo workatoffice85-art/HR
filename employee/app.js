@@ -1,10 +1,12 @@
 const API_URL = 'https://script.google.com/macros/s/AKfycbwNhaRKDP-7M4dXSQend8RbYPkXRgs5nzN0-BmNzxEO8IkBN9lt6KDtJCdOqpovhJEY1Q/exec';
-let currentUser = null;
+let currentUser = JSON.parse(localStorage.getItem('empSession'));
+let currentSite = null;
+let lastLocation = null;
+let lastDetection = null;
 let sitesData = [];
 let faceMatcher = null;
-let lastLocation = null;
-let registeredFaceDescriptor = null;
-let currentFaceDescriptor = null; // Stored during video match
+let currentFaceDescriptor = null;
+let timerInterval = null; // Added for live counter // Stored during video match
 let tempEmail = ""; // used during registration
 const MODEL_URL = '../models';
 
@@ -227,6 +229,78 @@ async function initSystem() {
 
     startVideo();
     getLocation();
+    checkCurrentStatus(); // Initial status check after login
+}
+
+async function checkCurrentStatus() {
+    try {
+        const res = await fetch(`${API_URL}?action=getAttendance&employeeId=${currentUser.id}`);
+        const result = await res.json();
+        if (result.success && result.data.length > 0) {
+            const lastRecord = result.data[result.data.length - 1];
+            const isCheckedIn = (lastRecord.checkIn && !lastRecord.checkOut);
+            
+            // Check if check-in was today (to avoid keeping old open sessions from yesterday)
+            const checkInDate = new Date(lastRecord.checkIn).toDateString();
+            const today = new Date().toDateString();
+
+            if (isCheckedIn && checkInDate === today) {
+                setAppState('in', lastRecord.checkIn);
+            } else {
+                setAppState('out');
+            }
+        } else {
+            setAppState('out');
+        }
+    } catch(e) {
+        console.error("Status check failed", e);
+        setAppState('out'); // Fallback to check-in
+    }
+}
+
+function setAppState(state, startTime) {
+    const btnIn = document.getElementById('btnCheckIn');
+    const btnOut = document.getElementById('btnCheckOut');
+    const timerContainer = document.getElementById('timerContainer');
+
+    if (state === 'in') {
+        btnIn.classList.add('hidden');
+        btnOut.classList.remove('hidden');
+        timerContainer.classList.remove('hidden');
+        startWorkTimer(startTime);
+    } else {
+        btnIn.classList.remove('hidden');
+        btnOut.classList.add('hidden');
+        timerContainer.classList.add('hidden');
+        stopWorkTimer();
+    }
+}
+
+function startWorkTimer(startTime) {
+    if (timerInterval) clearInterval(timerInterval);
+    const start = new Date(startTime).getTime();
+    
+    function update() {
+        const now = new Date().getTime();
+        const diff = now - start;
+        if (diff < 0) return;
+
+        const h = Math.floor(diff / 3600000);
+        const m = Math.floor((diff % 3600000) / 60000);
+        const s = Math.floor((diff % 60000) / 1000);
+
+        document.getElementById('workTimer').innerText = 
+            `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    }
+
+    update();
+    timerInterval = setInterval(update, 1000);
+}
+
+function stopWorkTimer() {
+    if (timerInterval) clearInterval(timerInterval);
+    timerInterval = null;
+    document.getElementById('workTimer').innerText = "00:00:00";
 }
 
 function setStatus(msg, className) {
@@ -349,9 +423,11 @@ async function handleCheckIn() {
     try {
         const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'text/plain' } });
         const result = await res.json();
-        if(result.success) alert(result.message);
-        else alert('عفواً: ' + result.message);
-    } catch(e) { console.error(e); alert('حدث خطأ في الشبكة: ' + e.message); }
+        if(result.success) {
+            alert(result.message);
+            setAppState('in', payload.checkIn);
+        } else alert('خطأ: ' + result.message);
+    } catch(e) { console.error(e); alert('حدث خطأ في الاتصال'); }
     document.getElementById('loader').classList.add('hidden');
 }
 
@@ -368,7 +444,10 @@ async function handleCheckOut() {
     try {
         const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'text/plain' } });
         const result = await res.json();
-        if(result.success) alert(result.message);
+        if(result.success) {
+            alert(result.message);
+            setAppState('out');
+        }
         else alert('خطأ: ' + result.message);
     } catch(e) { console.error(e); alert('حدث خطأ في الشبكة: ' + e.message); }
     document.getElementById('loader').classList.add('hidden');
