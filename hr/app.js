@@ -535,8 +535,16 @@ async function fetchSettings() {
         const res = await fetch(`${API_URL}?action=getSettings`);
         const result = await res.json();
         if (result.success) {
-            document.getElementById('setWorkStartTime').value = result.data.workStartTime || "09:00";
-            document.getElementById('setWorkEndTime').value = result.data.workEndTime || "17:00";
+            // Ensure time values are in HH:mm format for input[type="time"]
+            let start = result.data.workStartTime || "09:00";
+            let end = result.data.workEndTime || "17:00";
+            
+            // Basic normalization just in case
+            if (start.match(/^\d:\d\d$/)) start = "0" + start;
+            if (end.match(/^\d:\d\d$/)) end = "0" + end;
+
+            document.getElementById('setWorkStartTime').value = start;
+            document.getElementById('setWorkEndTime').value = end;
         }
     } catch (e) {
         console.error("Fetch Settings error", e);
@@ -616,10 +624,13 @@ function renderSiteRequestsTable(data) {
             </div>
         ` : '-';
 
+        const mapLinkHtml = req.mapLink ? `<a href="${req.mapLink}" target="_blank" style="color:var(--primary); text-decoration:underline;">فتح الرابط 📍</a>` : 'لا يوجد';
+
         tbody.innerHTML += `
             <tr>
                 <td>${req.employeeName}</td>
                 <td>${req.suggestedName}</td>
+                <td>${mapLinkHtml}</td>
                 <td dir="ltr" style="text-align:right">${req.latitude}, ${req.longitude}</td>
                 <td style="text-align:right">${new Date(req.timestamp).toLocaleString('ar-EG')}</td>
                 <td><span style="color:${statusColor}">${statusText}</span></td>

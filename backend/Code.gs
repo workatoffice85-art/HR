@@ -171,7 +171,7 @@ function doGet(e) {
       var rows = s.getDataRange().getValues();
       var settings = {};
       for (var i = 1; i < rows.length; i++) {
-        settings[rows[i][0]] = rows[i][1];
+        settings[rows[i][0]] = s.getRange(i + 1, 2).getDisplayValue();
       }
       // Default values if not set
       if (!settings.workStartTime) settings.workStartTime = "09:00";
@@ -181,13 +181,13 @@ function doGet(e) {
     }
 
     if (action === "getSiteRequests") {
-      var s = getOrCreateSheet("siteRequests", ["id", "employeeId", "employeeName", "latitude", "longitude", "suggestedName", "status", "timestamp"]);
+      var s = getOrCreateSheet("siteRequests", ["id", "employeeId", "employeeName", "latitude", "longitude", "suggestedName", "mapLink", "status", "timestamp"]);
       var d = s.getDataRange().getValues();
       d.shift();
       return json({
         success: true,
         data: d.map(function(r) { return {
-          id: r[0], employeeId: r[1], employeeName: r[2], latitude: r[3], longitude: r[4], suggestedName: r[5], status: r[6], timestamp: r[7]
+          id: r[0], employeeId: r[1], employeeName: r[2], latitude: r[3], longitude: r[4], suggestedName: r[5], mapLink: r[6], status: r[7], timestamp: r[8]
         };})
       });
     }
@@ -403,16 +403,16 @@ function doPost(e) {
 
     // SITE REQUESTS
     if (data.action === "addSiteRequest") {
-      var s = getOrCreateSheet("siteRequests", ["id", "employeeId", "employeeName", "latitude", "longitude", "suggestedName", "status", "timestamp"]);
+      var s = getOrCreateSheet("siteRequests", ["id", "employeeId", "employeeName", "latitude", "longitude", "suggestedName", "mapLink", "status", "timestamp"]);
       s.appendRow([
         "REQ" + Math.floor(10000 + Math.random() * 90000),
-        data.employeeId, data.employeeName, data.latitude, data.longitude, data.suggestedName, "pending", new Date().toISOString()
+        data.employeeId, data.employeeName, data.latitude, data.longitude, data.suggestedName, data.mapLink || "", "pending", new Date().toISOString()
       ]);
       return json({ success: true, message: "تم إرسال طلب تسجيل الموقع بنجاح، بانتظار موافقة الإدارة." });
     }
 
     if (data.action === "approveSiteRequest") {
-      var reqSheet = getOrCreateSheet("siteRequests", ["id", "employeeId", "employeeName", "latitude", "longitude", "suggestedName", "status", "timestamp"]);
+      var reqSheet = getOrCreateSheet("siteRequests", ["id", "employeeId", "employeeName", "latitude", "longitude", "suggestedName", "mapLink", "status", "timestamp"]);
       var sitesSheet = getOrCreateSheet("sites", ["id", "name", "latitude", "longitude", "radius"]);
       var rows = reqSheet.getDataRange().getValues();
       

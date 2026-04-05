@@ -460,6 +460,7 @@ function openRequestModal() {
     document.getElementById('requestSiteModal').classList.remove('hidden');
     document.getElementById('requestSiteCard').classList.remove('hidden'); // Ensure inner card is visible
     document.getElementById('suggestedSiteName').value = '';
+    document.getElementById('suggestedSiteLink').value = '';
 }
 
 function closeRequestModal() {
@@ -468,6 +469,7 @@ function closeRequestModal() {
 
 async function submitSiteRequest() {
     const name = document.getElementById('suggestedSiteName').value.trim();
+    const link = document.getElementById('suggestedSiteLink').value.trim();
     if (!name) return alert("يرجى إدخال اسم الموقع");
     if (!lastLocation) return alert("يجب توفير إحداثيات الموقع");
 
@@ -477,7 +479,8 @@ async function submitSiteRequest() {
         employeeName: currentUser.name,
         latitude: lastLocation.lat,
         longitude: lastLocation.lng,
-        suggestedName: name
+        suggestedName: name,
+        mapLink: link
     };
 
     document.getElementById('loader').classList.remove('hidden');

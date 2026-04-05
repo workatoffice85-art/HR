@@ -307,18 +307,25 @@ body {
 
 .table-container {
     width: 100%;
-    overflow-x: auto;
+    overflow-x: auto !important;
     background: rgba(30, 41, 59, 0.4);
     border-radius: 16px;
     border: 1px solid var(--card-border);
     margin-top: 15px;
     -webkit-overflow-scrolling: touch;
+    display: block;
 }
 
 .table-container table {
-    min-width: 700px; /* Ensures all columns are accessible via scroll */
+    min-width: 650px; 
     width: 100%;
     border-collapse: collapse;
+    white-space: nowrap;
+}
+
+.table-container th, .table-container td {
+    padding: 12px 15px;
+    text-align: right;
 }
 
 /* Custom Scrollbar for the table container */
