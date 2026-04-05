@@ -4,260 +4,100 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>لوحة تحكم الموارد البشرية | HR Dashboard</title>
-    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="../assets/global.css?v=1.2">
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/global.css?v=1.1">
     <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        :root {
-            --sidebar-width: 280px;
-        }
-        .dashboard-layout { 
-            display: flex; 
-            min-height: 100vh; 
-            background: var(--bg-color);
-        }
+        .dashboard-layout { display: flex; min-height: 100vh; }
+        .sidebar { width: 250px; background: rgba(15, 23, 42, 0.9); padding: 20px; border-left: 1px solid var(--card-border); }
+        .sidebar h2 { color: var(--secondary); margin-bottom: 30px; font-size: 1.5rem; text-align: center; }
+        .nav-link { display: block; padding: 12px 15px; color: var(--text-muted); text-decoration: none; border-radius: 8px; margin-bottom: 10px; transition: all 0.3s; cursor: pointer; }
+        .nav-link:hover, .nav-link.active { background: rgba(79, 70, 229, 0.2); color: var(--primary); }
+        .main-content { flex: 1; padding: 30px; overflow-y: auto; }
+        table { width: 100%; border-collapse: collapse; background: var(--card-bg); border-radius: 12px; overflow: hidden; }
+        th, td { padding: 15px; text-align: right; border-bottom: 1px solid var(--card-border); }
+        th { background: rgba(0,0,0,0.2); color: var(--text-muted); }
+        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        .modal-content { background: #1e293b; padding: 30px; border-radius: 16px; width: 90%; max-width: 500px; max-height:90vh; overflow-y:auto; }
+        .camera-box { width: 100%; background: #000; height: 250px; border-radius: 8px; margin-bottom: 15px; position:relative; display:flex; justify-content:center; overflow:hidden; }
+        #regVideo { width:100%; height:100%; object-fit:cover; }
+        #regCanvas { position:absolute; top:0; left:0; width:100%; height:100%; }
+        .filter-bar { display: flex; gap: 15px; margin-bottom: 20px; align-items: center; }
+        .filter-bar input, .filter-bar select { padding: 8px; border-radius: 6px; border: 1px solid var(--card-border); background: rgba(0,0,0,0.2); color: #fff; font-family: inherit;}
         
-        .sidebar { 
-            width: var(--sidebar-width); 
-            background: rgba(15, 23, 42, 0.8); 
-            backdrop-filter: blur(20px);
-            padding: 30px 20px; 
-            border-left: 1px solid var(--card-border);
-            display: flex;
-            flex-direction: column;
-            position: sticky;
-            top: 0;
-            height: 100vh;
-            z-index: 100;
-        }
-
-        .sidebar h2 { 
-            color: var(--text-main); 
-            margin-bottom: 40px; 
-            font-size: 1.5rem; 
-            font-weight: 800;
-            text-align: center;
-            background: linear-gradient(135deg, var(--primary), var(--secondary));
-            -webkit-background-clip: text;
-            background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-
-        .nav-link { 
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 14px 18px; 
-            color: var(--text-muted); 
-            text-decoration: none; 
-            border-radius: 12px; 
-            margin-bottom: 8px; 
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
-            cursor: pointer;
-            font-weight: 500;
-        }
-
-        .nav-link:hover { 
-            background: rgba(255, 255, 255, 0.05); 
-            color: var(--text-main);
-            transform: translateX(-5px);
-        }
-
-        .nav-link.active { 
-            background: linear-gradient(135deg, var(--primary), #4338ca); 
-            color: white;
-            box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.3);
-        }
-
-        .nav-link i { font-size: 1.25rem; }
-
-        .main-content { 
-            flex: 1; 
-            padding: 40px; 
-            overflow-y: auto;
-            max-width: 1400px;
-            margin: 0 auto;
-            width: 100%;
-        }
-        
-        .section-header {
-            margin-bottom: 30px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .section-header h2 {
-            font-size: 1.75rem;
-            font-weight: 800;
-            color: var(--text-main);
-        }
-
-        th, td { padding: 18px 20px; text-align: right; border-bottom: 1px solid var(--card-border); }
-        
-        .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 24px; margin-bottom: 40px; }
-        .kpi-card { 
-            background: var(--card-bg); 
-            border: 1px solid var(--card-border); 
-            padding: 24px; 
-            border-radius: 20px; 
-            text-align: right;
-            transition: all 0.3s;
-        }
-        .kpi-card:hover { transform: translateY(-5px); border-color: var(--primary); }
-        .kpi-card h3 { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 12px; font-weight: 600; }
-        .kpi-value { color: var(--text-main); font-size: 2.25rem; font-weight: 800; }
-        
-        .charts-grid { display: grid; grid-template-columns: 1fr; gap: 24px; margin-bottom: 40px; }
-        .chart-card { 
-            background: var(--card-bg); 
-            border: 1px solid var(--card-border); 
-            padding: 30px; 
-            border-radius: 24px; 
-        }
-
-        .modal { 
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-            background: rgba(0,0,0,0.8); 
-            backdrop-filter: blur(8px);
-            display: flex; align-items: center; justify-content: center; z-index: 1000; 
-        }
-        .modal-content { 
-            background: #111827; 
-            padding: 40px; 
-            border-radius: 24px; 
-            width: 90%; 
-            max-width: 550px; 
-            max-height: 90vh; 
-            overflow-y: auto; 
-            border: 1px solid var(--card-border);
-            box-shadow: var(--box-shadow-lg);
-        }
-
-        @media (max-width: 1024px) {
-            .sidebar { width: 80px; padding: 20px 10px; }
-            .sidebar h2, .nav-link span:last-child { display: none; }
-            .nav-link { justify-content: center; padding: 15px; }
-            .nav-link span:first-child { display: inline-block; font-size: 1.5rem; }
-            :root { --sidebar-width: 80px; }
-        }
-
-        @media (max-width: 768px) {
-            .dashboard-layout { flex-direction: column; }
-            .sidebar { 
-                width: 100%; height: auto; position: static; 
-                flex-direction: row; overflow-x: auto; 
-                padding: 10px; gap: 10px; border-left: none; border-bottom: 1px solid var(--card-border);
-            }
-            .sidebar h2 { display: none; }
-            .nav-link { margin-bottom: 0; white-space: nowrap; padding: 10px 15px; }
-            .nav-link span:last-child { display: inline-block; font-size: 0.85rem; }
-            .nav-link span:first-child { font-size: 1.25rem; }
-            .main-content { padding: 15px; }
-            .section-header { flex-direction: column; align-items: stretch; gap: 15px; }
-            .section-header h2 { font-size: 1.5rem; text-align: center; }
-            .btn-primary { padding: 12px 20px; font-size: 0.9rem; }
-            :root { --sidebar-width: 0px; }
-        }
+        /* Dashboard Charts & KPI */
+        .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .kpi-card { background: rgba(30, 41, 59, 0.8); border: 1px solid var(--card-border); padding: 20px; border-radius: 12px; text-align: center; }
+        .kpi-card h3 { color: var(--text-muted); font-size: 1rem; margin-bottom: 10px; }
+        .kpi-value { color: var(--primary); font-size: 2rem; font-weight: bold; }
+        .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
+        .chart-card { background: rgba(30, 41, 59, 0.8); border: 1px solid var(--card-border); padding: 20px; border-radius: 12px; }
+        @media (max-width: 768px) { .charts-grid { grid-template-columns: 1fr; } }
     </style>
 </head>
 <body>
     
     <!-- Login Section -->
     <div id="hrLoginSection" class="landing-container fade-in">
-        <div class="glass-card" style="width:100%; max-width:450px;">
-            <div class="header" style="text-align:center;">
-                <h2 style="font-size:2rem; font-weight:800; margin-bottom:10px;">بوابة الإدارة</h2>
-                <p>سجل دخولك لإدارة نظام الحضور</p>
-            </div>
+        <div class="glass-card" style="width:100%; max-width:400px;">
+            <h2 style="text-align:center; margin-bottom:20px;">تسجيل دخول الإدارة</h2>
             <div class="input-group">
-                <label>البريد الإلكتروني</label>
+                <label>البريد الإلكتروني لمدير الـ HR</label>
                 <input type="email" id="hrEmail" placeholder="admin@company.com">
             </div>
             <div class="input-group">
                 <label>كلمة المرور</label>
                 <input type="password" id="hrPass" placeholder="******">
             </div>
-            <button class="btn-primary" onclick="loginHR()" style="width:100%;">
-                <span>دخول النظام</span>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path><polyline points="10 17 15 12 10 7"></polyline><line x1="15" y1="12" x2="3" y2="12"></line></svg>
-            </button>
-            <div id="loginError" class="error-text hidden" style="margin-top:20px; color:var(--danger); text-align:center; background:rgba(239,68,68,0.1); padding:12px; border-radius:8px;"></div>
+            <button class="btn-primary" onclick="loginHR()">دخول</button>
+            <div id="loginError" class="error-text hidden" style="margin-top:15px; padding:10px; text-align:center;"></div>
         </div>
     </div>
 
     <!-- Dashboard Layout -->
     <div id="dashboardSection" class="dashboard-layout hidden fade-in">
         <div class="sidebar">
-            <h2 style="margin-bottom: 40px; font-size: 1.5rem; font-weight: 800; text-align: center;">HR Dashboard</h2>
-            <nav style="flex:1;">
-                <a class="nav-link active" onclick="showTab('attendance')">
-                    <span>📊</span>
-                    <span>سجلات الحضور</span>
-                </a>
-                <a class="nav-link" onclick="showTab('reports')">
-                    <span>📈</span>
-                    <span>التقارير الشهرية</span>
-                </a>
-                <a class="nav-link" onclick="showTab('employees')">
-                    <span>👥</span>
-                    <span>إدارة الموظفين</span>
-                </a>
-                <a class="nav-link" onclick="showTab('sites')">
-                    <span>📍</span>
-                    <span>مواقع العمل</span>
-                </a>
-            </nav>
-            <a class="nav-link" onclick="logout()" style="color:var(--danger); border:1px solid rgba(239,68,68,0.2);">
-                <span>🚪</span>
-                <span>تسجيل الخروج</span>
-            </a>
+            <h2>لوحة التحكم</h2>
+            <a class="nav-link active" onclick="showTab('attendance')">مراقبة الحضور اليومي</a>
+            <a class="nav-link" onclick="showTab('reports')">التقارير الشهرية</a>
+            <a class="nav-link" onclick="showTab('employees')">إدارة الموظفين</a>
+            <a class="nav-link" onclick="showTab('sites')">إدارة المواقع</a>
+            <a class="nav-link" onclick="logout()" style="color:var(--danger); margin-top:50px;">تسجيل خروج</a>
         </div>
-        
         <div class="main-content">
-            <div id="loader" class="loader-container hidden">
-                <div class="loader"></div>
-                <div class="loader-text">جاري جلب البيانات...</div>
-            </div>
+            
+            <div id="loader" class="loader hidden"></div>
 
             <!-- Attendance Tab -->
             <div id="tab-attendance" class="tab-content">
-                <div class="section-header">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
                     <h2>سجلات العمليات الشاملة</h2>
-                    <button class="btn-primary" style="padding:10px 20px;" onclick="fetchAttendance()">
-                        <span>تحديث البيانات</span>
-                    </button>
+                    <button class="btn-primary" style="width:auto;" onclick="fetchAttendance()">تحديث</button>
                 </div>
-                <div class="table-responsive">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>الموظف</th>
-                                <th>الموقع</th>
-                                <th>وقت الحضور</th>
-                                <th>وقت الانصراف</th>
-                                <th>إجمالي الساعات</th>
-                            </tr>
-                        </thead>
-                        <tbody id="attendanceTableBody"></tbody>
-                    </table>
-                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>الموظف</th>
+                            <th>الموقع</th>
+                            <th>وقت الحضور</th>
+                            <th>وقت الانصراف</th>
+                            <th>إجمالي الساعات</th>
+                            <th>الحالة</th>
+                        </tr>
+                    </thead>
+                    <tbody id="attendanceTableBody"></tbody>
+                </table>
             </div>
 
              <!-- Reports Tab -->
              <div id="tab-reports" class="tab-content hidden">
-                <div class="section-header">
-                    <h2>التقارير والتحليلات</h2>
-                </div>
-                
-                 <div class="glass-card" style="padding:24px; margin-bottom:30px; display:flex; gap:20px; align-items:center; flex-wrap:wrap;">
-                    <div class="input-group" style="margin-bottom:0; flex:1; min-width:200px;">
-                        <label>الشهر المستهدف</label>
-                        <input type="month" id="reportMonth" onchange="generateReport()">
-                    </div>
-                    <button class="btn-primary" style="padding:12px 24px;" onclick="generateReport()">توليد التقرير</button>
-                    <button class="btn-primary" style="padding:12px 24px; background:var(--secondary);" onclick="window.print()">طباعة التقرير</button>
+                <h2>التقرير الشهري للساعات والدوام</h2>
+                 <div class="filter-bar">
+                    <label>اختر الشهر:</label>
+                    <input type="month" id="reportMonth" onchange="generateReport()">
+                    <button class="btn-primary" style="width:auto; padding:8px 15px;" onclick="generateReport()">توليد التقرير</button>
+                    <button class="btn-primary" style="width:auto; padding:8px 15px; background:var(--secondary);" onclick="window.print()">طباعة</button>
                 </div>
                 
                 <div class="kpi-grid">
@@ -266,8 +106,12 @@
                         <div class="kpi-value" id="kpiTotalHours">0</div>
                     </div>
                     <div class="kpi-card">
-                        <h3>الموظفين النشطين</h3>
+                        <h3>عدد الموظفين الفعالين</h3>
                         <div class="kpi-value" id="kpiActiveEmp">0</div>
+                    </div>
+                    <div class="kpi-card">
+                        <h3>إجمالي حالات التأخير</h3>
+                        <div class="kpi-value" id="kpiTotalLates">0</div>
                     </div>
                 </div>
 
@@ -275,68 +119,65 @@
                     <div class="chart-card">
                         <canvas id="hoursChart"></canvas>
                     </div>
+                    <div class="chart-card">
+                        <canvas id="latesChart"></canvas>
+                    </div>
                 </div>
-
-                <div class="table-responsive">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>ID الموظف</th>
-                                <th>اسم الموظف</th>
-                                <th>أيام الحضور</th>
-                                <th>أيام الغياب</th>
-                                <th>العمل الإضافي</th>
-                                <th>إجمالي الساعات</th>
-                            </tr>
-                        </thead>
-                        <tbody id="reportsTableBody"></tbody>
-                    </table>
-                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID الموظف</th>
+                            <th>اسم الموظف</th>
+                            <th>أيام الحضور</th>
+                            <th>أيام الغياب</th>
+                            <th>التأخير</th>
+                            <th>العمل الإضافي</th>
+                            <th>إجمالي الساعات</th>
+                        </tr>
+                    </thead>
+                    <tbody id="reportsTableBody"></tbody>
+                </table>
             </div>
 
             <!-- Employees Tab -->
             <div id="tab-employees" class="tab-content hidden">
-                <div class="section-header">
-                    <h2>قائمة الكادر الوظيفي</h2>
-                    <button class="btn-primary" style="background:var(--secondary);" onclick="openEmployeeModal()">+ إضافة موظف جديد</button>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                    <h2>قائمة الموظفين</h2>
+                    <button class="btn-primary" style="width:auto; background:var(--secondary);" onclick="openEmployeeModal()">+ إضافة موظف</button>
                 </div>
-                <div class="table-responsive">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>الاسم</th>
-                                <th>البريد الإلكتروني</th>
-                                <th>الهاتف</th>
-                                <th>الصلاحية</th>
-                                <th>البصمة</th>
-                                <th>الإجراءات</th>
-                            </tr>
-                        </thead>
-                        <tbody id="employeesTableBody"></tbody>
-                    </table>
-                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="padding: 15px;">الاسم</th>
+                            <th style="padding: 15px;">البريد</th>
+                            <th style="padding: 15px;">الهاتف</th>
+                            <th style="padding: 15px;">الصلاحية</th>
+                            <th style="padding: 15px;">البصمة</th>
+                            <th style="padding: 15px;">الإجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody id="employeesTableBody"></tbody>
+                </table>
             </div>
 
             <!-- Sites Tab -->
             <div id="tab-sites" class="tab-content hidden">
-                 <div class="section-header">
-                    <h2>نطاقات ومواقع العمل</h2>
-                    <button class="btn-primary" style="background:var(--secondary);" onclick="openSiteModal()">+ إضافة موقع جديد</button>
+                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                    <h2>مواقع العمل</h2>
+                    <button class="btn-primary" style="width:auto; background:var(--secondary);" onclick="openSiteModal()">+ إضافة موقع (سجل بشيت جوجل)</button>
                 </div>
-                <div class="table-responsive">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>اسم الموقع</th>
-                                <th>خط العرض</th>
-                                <th>خط الطول</th>
-                                <th>النطاق</th>
-                                <th>الإجراءات</th>
-                            </tr>
-                        </thead>
-                        <tbody id="sitesTableBody"></tbody>
-                    </table>
-                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="padding: 15px;">اسم الموقع</th>
+                            <th style="padding: 15px;">خط العرض (Lat)</th>
+                            <th style="padding: 15px;">خط الطول (Lng)</th>
+                            <th style="padding: 15px;">النطاق (متر)</th>
+                            <th style="padding: 15px;">الإجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sitesTableBody"></tbody>
+                </table>
             </div>
         </div>
     </div>
@@ -345,74 +186,73 @@
     <div id="employeeModal" class="modal hidden">
         <div class="modal-content">
             <input type="hidden" id="editEmpId">
-            <h3 id="empModalTitle" style="margin-bottom:25px; font-size:1.5rem; font-weight:800;">بيانات الموظف</h3>
+            <h3 id="empModalTitle" style="margin-bottom:15px;">إضافة موظف جديد</h3>
             <div class="input-group">
-                <label>الاسم الكامل</label>
-                <input type="text" id="empName" placeholder="الاسم الرباعي">
+                <label>الاسم</label>
+                <input type="text" id="empName">
             </div>
             <div class="input-group">
-                <label>البريد الإلكتروني المهني</label>
-                <input type="email" id="empEmail" placeholder="employee@company.com">
+                <label>الإيميل</label>
+                <input type="email" id="empEmail">
             </div>
             <div class="input-group">
-                <label>كلمة المرور</label>
-                <input type="text" id="empPass" placeholder="اتركها فارغة للتعديل بدون تغيير">
+                <label>كلمة المرور المؤقتة</label>
+                <input type="text" id="empPass">
             </div>
             <div class="input-group">
-                <label>المواقع المتاحة (فواصل بين الأسماء)</label>
-                <input type="text" id="empSites" placeholder="site1, site2">
+                <label>معرف المواقع (مفصولة بفاصلة)</label>
+                <input type="text" id="empSites" placeholder="مثال: site1,site2">
             </div>
             <div class="input-group">
-                <label>نوع الحساب</label>
+                <label>الدور</label>
                 <select id="empRole">
-                    <option value="employee">موظف (Standard)</option>
-                    <option value="hr">إدارة (Administrator)</option>
+                    <option value="employee">موظف (Employee)</option>
+                    <option value="hr">إدارة (HR)</option>
                 </select>
             </div>
             
-            <div style="display:flex; gap:12px; margin-top:10px;">
-                <button class="btn-primary" onclick="saveEmployee()" style="flex:2;">حفظ البيانات</button>
-                <button class="btn-danger" onclick="closeEmployeeModal()" style="flex:1;">إلغاء</button>
+            <div style="display:flex; gap:10px;">
+                <button class="btn-primary" onclick="saveEmployee()">حفظ</button>
+                <button class="btn-danger" style="background:transparent; border:1px solid var(--danger);" onclick="closeEmployeeModal()">إلغاء</button>
             </div>
         </div>
     </div>
 
-    <!-- Site Modal -->
     <div id="siteModal" class="modal hidden">
         <div class="modal-content">
             <input type="hidden" id="editSiteId">
-            <h3 id="siteModalTitle" style="margin-bottom:25px; font-size:1.5rem; font-weight:800;">إعدادات موقع العمل</h3>
+            <h3 id="siteModalTitle" style="margin-bottom:15px;">إضافة موقع عمل جديد</h3>
             <div class="input-group">
                 <label>اسم الموقع</label>
                 <input type="text" id="siteName" placeholder="مثال: الفرع الرئيسي">
             </div>
             <div class="input-group">
-                <label>رابط الموقع من خرائط جوجل</label>
-                <input type="text" id="siteMapLink" placeholder="ضع الرابط هنا للاستخراج التلقائي..." oninput="parseMapLink()">
+                <label>رابط خرائط جوجل (Google Maps Link)</label>
+                <input type="text" id="siteMapLink" placeholder="انسخ الرابط هنا..." oninput="parseMapLink()">
+                <small style="color:var(--text-muted); font-size:0.8rem;">سوف نحاول استخراج الإحداثيات من هذا الرابط تلقائياً.</small>
             </div>
-            <div style="display:flex; gap:15px;">
+            <div style="display:flex; gap:10px;">
                 <div class="input-group" style="flex:1;">
-                    <label>Lat</label>
-                    <input type="text" id="siteLat" readonly style="background:rgba(0,0,0,0.2);">
+                    <label>خط العرض (Lat)</label>
+                    <input type="text" id="siteLat" placeholder="تلقائي عبر الرابط">
                 </div>
                 <div class="input-group" style="flex:1;">
-                    <label>Lng</label>
-                    <input type="text" id="siteLng" readonly style="background:rgba(0,0,0,0.2);">
+                    <label>خط الطول (Lng)</label>
+                    <input type="text" id="siteLng" placeholder="تلقائي عبر الرابط">
                 </div>
             </div>
             <div class="input-group">
-                <label>نطاق السماح (أمتار)</label>
-                <input type="number" id="siteRadius" value="30">
+                <label>نطاق الحضور المسموح (الـ Radius بالمتر)</label>
+                <input type="number" id="siteRadius" value="20">
             </div>
             
-            <div style="display:flex; gap:12px; margin-top:20px;">
-                <button class="btn-primary" onclick="saveSite()" style="flex:2;">حفظ الموقع</button>
-                <button class="btn-danger" onclick="closeSiteModal()" style="flex:1;">إلغاء</button>
+            <div style="display:flex; gap:10px; margin-top:10px;">
+                <button class="btn-primary" onclick="saveSite()">حفظ الموقع</button>
+                <button class="btn-danger" style="background:transparent; border:1px solid var(--danger);" onclick="closeSiteModal()">إلغاء</button>
             </div>
         </div>
     </div>
 
-    <script src="app.js?v=1.2"></script>
+    <script src="app.js?v=1.1"></script>
 </body>
 </html>
-

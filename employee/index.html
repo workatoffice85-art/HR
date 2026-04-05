@@ -108,10 +108,7 @@
                  <p id="siteText" style="color:var(--text-muted); font-size:0.9rem;"></p>
             </div>
             
-            <div id="loader" class="loader-container hidden">
-                <div class="loader"></div>
-                <div class="loader-text">جاري جلب البيانات... يرجى الانتظار قليلاً</div>
-            </div>
+            <div id="loader" class="loader hidden"></div>
             
             <div class="camera-container">
                 <video id="videoElement" autoplay muted playsinline></video>
@@ -157,6 +154,10 @@
                  <div style="background: rgba(30, 41, 59, 0.8); padding: 15px; border-radius: 8px; text-align: center;">
                      <h4 style="margin:0; color:var(--text-muted)">أيام الغياب</h4>
                      <h2 style="margin:5px 0; color:var(--danger)" id="empTotalAbsent">0</h2>
+                 </div>
+                 <div style="background: rgba(30, 41, 59, 0.8); padding: 15px; border-radius: 8px; text-align: center;">
+                     <h4 style="margin:0; color:var(--text-muted)">مرات التأخير</h4>
+                     <h2 style="margin:5px 0; color:var(--primary)" id="empTotalLates">0</h2>
                  </div>
                  <div style="background: rgba(30, 41, 59, 0.8); padding: 15px; border-radius: 8px; text-align: center;">
                      <h4 style="margin:0; color:var(--text-muted)">إجمالي الساعات</h4>

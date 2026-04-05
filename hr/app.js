@@ -93,31 +93,28 @@ function renderAttendanceTable(data) {
     tbody.innerHTML = '';
     // Reverse to show newest first
     [...data].reverse().forEach(record => {
-        const checkInTime = new Date(record.checkIn).toLocaleString('ar-EG', {
-            hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit'
-        });
-        const checkOutTime = record.checkOut ? new Date(record.checkOut).toLocaleString('ar-EG', {
-            hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit'
-        }) : 'الآن';
+        const checkInTime = new Date(record.checkIn).toLocaleString('ar-EG');
+        const checkOutTime = record.checkOut ? new Date(record.checkOut).toLocaleString('ar-EG') : 'لم ينصرف بعد';
         
         let statusText = 'حاضر';
-        let statusClass = 'badge-success';
+        let statusColor = 'var(--secondary)';
         
         if (record.status === 'late') {
             statusText = 'متأخر';
-            statusClass = 'badge-danger';
+            statusColor = 'var(--danger)';
         } else if (record.status === 'overtime') {
             statusText = 'عمل إضافي';
-            statusClass = 'badge-warning';
+            statusColor = '#3b82f6';
         }
 
         tbody.innerHTML += `
-            <tr class="fade-in">
-                <td style="font-weight:600; color:var(--text-main)">${record.employeeName}</td>
-                <td><span style="color:var(--text-muted)">📍</span> ${record.siteName}</td>
-                <td dir="ltr" style="text-align:right; font-family:monospace;">${checkInTime}</td>
-                <td dir="ltr" style="text-align:right; font-family:monospace; color:${record.checkOut ? 'inherit' : 'var(--secondary)'}">${checkOutTime}</td>
-                <td style="font-weight:500;">${record.totalHours ? record.totalHours + ' س' : '-'}</td>
+            <tr>
+                <td>${record.employeeName}</td>
+                <td>${record.siteName}</td>
+                <td dir="ltr" style="text-align:right">${checkInTime}</td>
+                <td dir="ltr" style="text-align:right">${checkOutTime}</td>
+                <td>${record.totalHours ? record.totalHours + ' ساعات' : '-'}</td>
+                <td><span style="color:${statusColor}">${statusText}</span></td>
             </tr>
         `;
     });
@@ -147,7 +144,9 @@ function generateReport() {
              reportAcc[empId] = {
                  name: record.employeeName,
                  uniqueDates: new Set(),
+                 lateDates: new Set(),
                  daysPresent: 0,
+                 lates: 0,
                  overtime: 0,
                  totalHours: 0
              };
@@ -160,6 +159,12 @@ function generateReport() {
             empStats.daysPresent += 1;
         }
 
+        if(record.status === 'late') {
+            if (!empStats.lateDates.has(recordDate)) {
+                empStats.lateDates.add(recordDate);
+                empStats.lates += 1;
+            }
+        }
         if(record.status === 'overtime') empStats.overtime += 1;
         if(record.totalHours) empStats.totalHours += parseFloat(record.totalHours);
     });
@@ -179,10 +184,12 @@ function generateReport() {
     }
 
     let kpiTotalHours = 0;
+    let kpiTotalLates = 0;
     let kpiActiveEmp = Object.keys(reportAcc).length;
 
     const names = [];
     const hours = [];
+    const lates = [];
 
     const tbody = document.getElementById('reportsTableBody');
     tbody.innerHTML = '';
@@ -190,11 +197,13 @@ function generateReport() {
     for (let empId in reportAcc) {
         const data = reportAcc[empId];
         kpiTotalHours += data.totalHours;
+        kpiTotalLates += data.lates;
         
         const absentDays = workingDaysPassedCount - data.daysPresent;
         
         names.push(data.name);
         hours.push((data.totalHours).toFixed(2));
+        lates.push(data.lates);
 
         tbody.innerHTML += `
             <tr>
@@ -202,6 +211,7 @@ function generateReport() {
                 <td>${data.name}</td>
                 <td>${data.daysPresent} أيام</td>
                 <td><span style="color:${absentDays > 0 ? 'var(--danger)' : 'inherit'}">${absentDays > 0 ? absentDays : 0} أيام</span></td>
+                <td><span style="color:${data.lates > 0 ? 'var(--danger)' : 'inherit'}">${data.lates} مرات</span></td>
                 <td><span style="color:#3b82f6">${data.overtime || 0} أيام</span></td>
                 <td>${data.totalHours.toFixed(2)} ساعات</td>
             </tr>
@@ -209,15 +219,18 @@ function generateReport() {
     }
 
     document.getElementById('kpiTotalHours').innerText = kpiTotalHours.toFixed(2);
+    document.getElementById('kpiTotalLates').innerText = kpiTotalLates;
     document.getElementById('kpiActiveEmp').innerText = kpiActiveEmp;
 
-    updateCharts(names, hours);
+    updateCharts(names, hours, lates);
 }
 
-function updateCharts(labels, hoursData) {
+function updateCharts(labels, hoursData, latesData) {
     const ctxHours = document.getElementById('hoursChart').getContext('2d');
+    const ctxLates = document.getElementById('latesChart').getContext('2d');
 
     if(hoursChartInstance) hoursChartInstance.destroy();
+    if(latesChartInstance) latesChartInstance.destroy();
 
     Chart.defaults.color = '#94a3b8';
     Chart.defaults.font.family = 'Tajawal';
@@ -238,6 +251,25 @@ function updateCharts(labels, hoursData) {
         options: {
             responsive: true,
             plugins: { title: { display: true, text: 'ساعات العمل لكل موظف' } }
+        }
+    });
+
+    latesChartInstance = new Chart(ctxLates, {
+        type: 'doughnut',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'مرات التأخير',
+                data: latesData,
+                backgroundColor: [
+                    '#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6', '#d946ef'
+                ],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { title: { display: true, text: 'نسبة التأخير بين الموظفين' } }
         }
     });
 }
