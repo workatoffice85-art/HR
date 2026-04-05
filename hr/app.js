@@ -101,8 +101,14 @@ function renderAttendanceTable(data) {
     tbody.innerHTML = '';
     // Reverse to show newest first
     [...data].reverse().forEach(record => {
-        const checkInTime = new Date(record.checkIn).toLocaleString('ar-EG');
-        const checkOutTime = record.checkOut ? new Date(record.checkOut).toLocaleString('ar-EG') : 'لم ينصرف بعد';
+        const cInObj = new Date(record.checkIn);
+        const checkInTime = !isNaN(cInObj) ? cInObj.toLocaleString('ar-EG') : (record.checkIn || '-');
+        
+        let checkOutTime = 'لم ينصرف بعد';
+        if (record.checkOut) {
+            const cOutObj = new Date(record.checkOut);
+            checkOutTime = !isNaN(cOutObj) ? cOutObj.toLocaleString('ar-EG') : (record.checkOut || '-');
+        }
         
         let statusText = 'حاضر';
         let statusColor = 'var(--secondary)';
@@ -117,12 +123,12 @@ function renderAttendanceTable(data) {
 
         tbody.innerHTML += `
             <tr>
-                <td>${record.employeeName}</td>
-                <td>${record.siteName}</td>
-                <td dir="ltr" style="text-align:right">${checkInTime}</td>
-                <td dir="ltr" style="text-align:right">${checkOutTime}</td>
-                <td>${record.totalHours ? record.totalHours + ' ساعات' : '-'}</td>
-                <td><span style="color:${statusColor}">${statusText}</span></td>
+                <td data-label="الموظف">${record.employeeName}</td>
+                <td data-label="الموقع">${record.siteName}</td>
+                <td data-label="وقت الحضور" dir="ltr">${checkInTime}</td>
+                <td data-label="وقت الانصراف" dir="ltr">${checkOutTime}</td>
+                <td data-label="إجمالي الساعات">${record.totalHours ? record.totalHours + ' ساعات' : '-'}</td>
+                <td data-label="الحالة"><span style="color:${statusColor}">${statusText}</span></td>
             </tr>
         `;
     });
@@ -215,13 +221,13 @@ function generateReport() {
 
         tbody.innerHTML += `
             <tr>
-                <td>${empId}</td>
-                <td>${data.name}</td>
-                <td>${data.daysPresent} أيام</td>
-                <td><span style="color:${absentDays > 0 ? 'var(--danger)' : 'inherit'}">${absentDays > 0 ? absentDays : 0} أيام</span></td>
-                <td><span style="color:${data.lates > 0 ? 'var(--danger)' : 'inherit'}">${data.lates} مرات</span></td>
-                <td><span style="color:#3b82f6">${data.overtime || 0} أيام</span></td>
-                <td>${data.totalHours.toFixed(2)} ساعات</td>
+                <td data-label="ID الموظف">${empId}</td>
+                <td data-label="اسم الموظف">${data.name}</td>
+                <td data-label="أيام الحضور">${data.daysPresent} أيام</td>
+                <td data-label="أيام الغياب"><span style="color:${absentDays > 0 ? 'var(--danger)' : 'inherit'}">${absentDays > 0 ? absentDays : 0} أيام</span></td>
+                <td data-label="التأخير"><span style="color:${data.lates > 0 ? 'var(--danger)' : 'inherit'}">${data.lates} مرات</span></td>
+                <td data-label="العمل الإضافي"><span style="color:#3b82f6">${data.overtime || 0} أيام</span></td>
+                <td data-label="إجمالي الساعات">${data.totalHours.toFixed(2)} ساعات</td>
             </tr>
         `;
     }
@@ -294,12 +300,12 @@ async function fetchEmployees() {
             result.data.forEach(record => {
                 const row = document.createElement('tr');
                 row.innerHTML = `
-                    <td>${record.name}</td>
-                    <td>${record.email}</td>
-                    <td>${record.phone || '-'}</td>
-                    <td>${record.role}</td>
-                    <td>${record.faceDescriptor ? '✅ مسجل' : '❌ لا يوجد'}</td>
-                    <td style="display:flex; gap:8px; justify-content:center; padding:10px;">
+                    <td data-label="الاسم">${record.name}</td>
+                    <td data-label="البريد">${record.email}</td>
+                    <td data-label="الهاتف">${record.phone || '-'}</td>
+                    <td data-label="الصلاحية">${record.role}</td>
+                    <td data-label="البصمة">${record.faceDescriptor ? '✅ مسجل' : '❌ لا يوجد'}</td>
+                    <td data-label="الإجراءات" style="display:flex; gap:8px; justify-content:center; padding:10px;">
                         <button class="btn-primary" style="padding:5px 12px; font-size:0.85rem; width:auto;" onclick="editEmployee('${record.id}')">تعديل ✏️</button>
                         <button class="btn-danger" style="padding:5px 12px; font-size:0.85rem; width:auto; background:rgba(239,68,68,0.1); border:1px solid var(--danger); color:var(--danger);" onclick="deleteEntity('deleteEmployee', '${record.id}', '${record.name}')">حذف 🗑️</button>
                     </td>
@@ -326,11 +332,11 @@ async function fetchSites() {
                 console.log("Rendering site record:", record);
                 const row = document.createElement('tr');
                 row.innerHTML = `
-                    <td>${record.name}</td>
-                    <td>${record.latitude}</td>
-                    <td>${record.longitude}</td>
-                    <td>${record.radius} متر</td>
-                    <td style="display:flex; gap:8px; justify-content:center; padding:10px;">
+                    <td data-label="اسم الموقع">${record.name}</td>
+                    <td data-label="خط العرض">${record.latitude}</td>
+                    <td data-label="خط الطول">${record.longitude}</td>
+                    <td data-label="النطاق">${record.radius} متر</td>
+                    <td data-label="الإجراءات" style="display:flex; gap:8px; justify-content:center; padding:10px;">
                         <button class="btn-primary" style="padding:5px 12px; font-size:0.85rem; width:auto;" onclick="editSite('${record.id}')">تعديل ✏️</button>
                         <button class="btn-danger" style="padding:5px 12px; font-size:0.85rem; width:auto; background:rgba(239,68,68,0.1); border:1px solid var(--danger); color:var(--danger);" onclick="deleteEntity('deleteSite', '${record.id}', '${record.name}')">حذف 🗑️</button>
                     </td>
@@ -626,15 +632,18 @@ function renderSiteRequestsTable(data) {
 
         const mapLinkHtml = req.mapLink ? `<a href="${req.mapLink}" target="_blank" style="color:var(--primary); text-decoration:underline;">فتح الرابط 📍</a>` : 'لا يوجد';
 
+        const dateObj = req.timestamp ? new Date(req.timestamp) : null;
+        const dateStr = (dateObj && !isNaN(dateObj)) ? dateObj.toLocaleString('ar-EG') : (req.timestamp || '-');
+
         tbody.innerHTML += `
             <tr>
-                <td>${req.employeeName}</td>
-                <td>${req.suggestedName}</td>
-                <td>${mapLinkHtml}</td>
-                <td dir="ltr" style="text-align:right">${req.latitude}, ${req.longitude}</td>
-                <td style="text-align:right">${new Date(req.timestamp).toLocaleString('ar-EG')}</td>
-                <td><span style="color:${statusColor}">${statusText}</span></td>
-                <td>${actions}</td>
+                <td data-label="الموظف">${req.employeeName}</td>
+                <td data-label="اسم الموقع المقترح">${req.suggestedName}</td>
+                <td data-label="رابط الخريطة">${mapLinkHtml}</td>
+                <td data-label="الإحداثيات" dir="ltr">${req.latitude}, ${req.longitude}</td>
+                <td data-label="التاريخ">${dateStr}</td>
+                <td data-label="الحالة"><span style="color:${statusColor}">${statusText}</span></td>
+                <td data-label="الإجراءات">${actions}</td>
             </tr>
         `;
     });

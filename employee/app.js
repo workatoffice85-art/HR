@@ -621,19 +621,19 @@ function renderMyReports(data, monthStr) {
 
             tbody.innerHTML += `
                 <tr>
-                    <td style="padding:10px; border-bottom:1px solid var(--card-border)">${item.date.toLocaleDateString('ar-EG')}</td>
-                    <td style="padding:10px; border-bottom:1px solid var(--card-border)" dir="ltr">${new Date(item.checkIn).toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'})}</td>
-                    <td style="padding:10px; border-bottom:1px solid var(--card-border)" dir="ltr">${item.checkOut ? new Date(item.checkOut).toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'}) : '-'}</td>
-                    <td style="padding:10px; border-bottom:1px solid var(--card-border)"><span style="color:${statusColor}">${statusText}</span></td>
+                    <td data-label="التاريخ">${item.date.toLocaleDateString('ar-EG')}</td>
+                    <td data-label="الحضور" dir="ltr">${new Date(item.checkIn).toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'})}</td>
+                    <td data-label="الانصراف" dir="ltr">${item.checkOut ? new Date(item.checkOut).toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'}) : '-'}</td>
+                    <td data-label="الحالة"><span style="color:${statusColor}">${statusText}</span></td>
                 </tr>
             `;
         } else {
             // Absent Row
             tbody.innerHTML += `
                 <tr style="background: rgba(239, 68, 68, 0.05);">
-                    <td style="padding:10px; border-bottom:1px solid var(--card-border)">${item.date.toLocaleDateString('ar-EG')}</td>
-                    <td colspan="2" style="padding:10px; border-bottom:1px solid var(--card-border); text-align:center; color:var(--danger); font-size:0.8rem;">غائب (لم يتم تسجيل حضور)</td>
-                    <td style="padding:10px; border-bottom:1px solid var(--card-border)"><span style="color:var(--danger)">غائب</span></td>
+                    <td data-label="التاريخ">${item.date.toLocaleDateString('ar-EG')}</td>
+                    <td data-label="التفاصيل" colspan="2" style="text-align:center !important; color:var(--danger); font-size:0.8rem;">غائب (لم يتم تسجيل حضور)</td>
+                    <td data-label="الحالة"><span style="color:var(--danger)">غائب</span></td>
                 </tr>
             `;
         }
