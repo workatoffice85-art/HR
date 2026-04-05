@@ -119,7 +119,8 @@ async function captureFaceRegistration() {
     document.getElementById('regStatusMessage').classList.remove('hidden');
     document.getElementById('regStatusMessage').innerText = 'جاري مسح الوجه...';
     
-    const detections = await faceapi.detectSingleFace(video).withFaceLandmarks().withFaceDescriptor();
+    const options = new faceapi.SsdMobilenetv1Options({ minConfidence: 0.3 });
+    const detections = await faceapi.detectSingleFace(video, options).withFaceLandmarks().withFaceDescriptor();
     if(detections) {
         registeredFaceDescriptor = Array.from(detections.descriptor);
         document.getElementById('regStatusMessage').innerText = 'تم التقاط البصمة بنجاح ✓';
@@ -217,7 +218,8 @@ function startVideo() {
         
         setInterval(async () => {
             if(!faceMatcher) return;
-            const detections = await faceapi.detectSingleFace(video).withFaceLandmarks().withFaceDescriptor();
+            const options = new faceapi.SsdMobilenetv1Options({ minConfidence: 0.3 });
+            const detections = await faceapi.detectSingleFace(video, options).withFaceLandmarks().withFaceDescriptor();
             
             const ctx = canvas.getContext('2d');
             ctx.clearRect(0, 0, canvas.width, canvas.height);
