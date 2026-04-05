@@ -38,7 +38,7 @@ async function loginHR() {
             headers: { 'Content-Type': 'text/plain' }
         });
         const result = await response.json();
-        
+
         if (result.success) {
             localStorage.setItem('hrSession', JSON.stringify(result.data));
             checkSession();
@@ -64,7 +64,7 @@ function showTab(tabName) {
     document.querySelectorAll('.nav-link').forEach(el => el.classList.remove('active'));
     document.getElementById('tab-' + tabName).classList.remove('hidden');
     event.currentTarget.classList.add('active');
-    
+
     if (tabName === 'attendance') fetchAttendance();
     if (tabName === 'employees') fetchEmployees();
     if (tabName === 'sites') fetchSites();
@@ -80,11 +80,11 @@ async function fetchAttendance() {
     try {
         const res = await fetch(`${API_URL}?action=getAttendance`);
         const result = await res.json();
-        if(result.success) {
+        if (result.success) {
             allAttendanceData = result.data;
             renderAttendanceTable(allAttendanceData);
         }
-    } catch(e) { console.error(e); }
+    } catch (e) { console.error(e); }
     document.getElementById('loader').classList.add('hidden');
 }
 
@@ -95,10 +95,10 @@ function renderAttendanceTable(data) {
     [...data].reverse().forEach(record => {
         const checkInTime = new Date(record.checkIn).toLocaleString('ar-EG');
         const checkOutTime = record.checkOut ? new Date(record.checkOut).toLocaleString('ar-EG') : 'لم ينصرف بعد';
-        
+
         let statusText = 'حاضر';
         let statusColor = 'var(--secondary)';
-        
+
         if (record.status === 'late') {
             statusText = 'متأخر';
             statusColor = 'var(--danger)';
@@ -123,8 +123,8 @@ function renderAttendanceTable(data) {
 // Reports Logic
 function generateReport() {
     const monthVal = document.getElementById('reportMonth').value; // YYYY-MM
-    if(!monthVal || allAttendanceData.length === 0) return;
-    
+    if (!monthVal || allAttendanceData.length === 0) return;
+
     const targetYear = parseInt(monthVal.split('-')[0]);
     const targetMonth = parseInt(monthVal.split('-')[1]) - 1; // 0-based
 
@@ -139,34 +139,34 @@ function generateReport() {
     filtered.forEach(record => {
         const empId = record.employeeId;
         const recordDate = new Date(record.checkIn).toDateString(); // YYYY-MM-DD unique string
-        
-        if(!reportAcc[empId]) {
-             reportAcc[empId] = {
-                 name: record.employeeName,
-                 uniqueDates: new Set(),
-                 daysPresent: 0,
-                 overtime: 0,
-                 totalHours: 0
-             };
+
+        if (!reportAcc[empId]) {
+            reportAcc[empId] = {
+                name: record.employeeName,
+                uniqueDates: new Set(),
+                daysPresent: 0,
+                overtime: 0,
+                totalHours: 0
+            };
         }
-        
+
         const empStats = reportAcc[empId];
-        
+
         if (!empStats.uniqueDates.has(recordDate)) {
             empStats.uniqueDates.add(recordDate);
             empStats.daysPresent += 1;
         }
 
-        if(record.status === 'overtime') empStats.overtime += 1;
-        if(record.totalHours) empStats.totalHours += parseFloat(record.totalHours);
+        if (record.status === 'overtime') empStats.overtime += 1;
+        if (record.totalHours) empStats.totalHours += parseFloat(record.totalHours);
     });
 
     // Calculate working days passed in the selected month
     const now = new Date();
     let workingDaysPassedCount = 0;
-    const endDay = (targetYear === now.getFullYear() && targetMonth === now.getMonth()) 
-                   ? now.getDate() 
-                   : new Date(targetYear, targetMonth + 1, 0).getDate();
+    const endDay = (targetYear === now.getFullYear() && targetMonth === now.getMonth())
+        ? now.getDate()
+        : new Date(targetYear, targetMonth + 1, 0).getDate();
 
     for (let i = 1; i <= endDay; i++) {
         const d = new Date(targetYear, targetMonth, i);
@@ -187,9 +187,9 @@ function generateReport() {
     for (let empId in reportAcc) {
         const data = reportAcc[empId];
         kpiTotalHours += data.totalHours;
-        
+
         const absentDays = workingDaysPassedCount - data.daysPresent;
-        
+
         names.push(data.name);
         hours.push((data.totalHours).toFixed(2));
 
@@ -214,7 +214,7 @@ function generateReport() {
 function updateCharts(labels, hoursData) {
     const ctxHours = document.getElementById('hoursChart').getContext('2d');
 
-    if(hoursChartInstance) hoursChartInstance.destroy();
+    if (hoursChartInstance) hoursChartInstance.destroy();
 
     Chart.defaults.color = '#94a3b8';
     Chart.defaults.font.family = 'Tajawal';
@@ -244,7 +244,7 @@ async function fetchEmployees() {
     try {
         const res = await fetch(`${API_URL}?action=getEmployees`);
         const result = await res.json();
-        if(result.success) {
+        if (result.success) {
             allEmployees = result.data; // Store for editing
             const tbody = document.getElementById('employeesTableBody');
             tbody.innerHTML = '';
@@ -264,7 +264,7 @@ async function fetchEmployees() {
                 tbody.appendChild(row);
             });
         }
-    } catch(e) { console.error(e); }
+    } catch (e) { console.error(e); }
     document.getElementById('loader').classList.add('hidden');
 }
 
@@ -275,7 +275,7 @@ async function fetchSites() {
         const res = await fetch(`${API_URL}?action=getSites`);
         const result = await res.json();
         console.log("Sites result:", result);
-        if(result.success) {
+        if (result.success) {
             allSites = result.data;
             const tbody = document.getElementById('sitesTableBody');
             tbody.innerHTML = '';
@@ -295,7 +295,7 @@ async function fetchSites() {
                 tbody.appendChild(row);
             });
         }
-    } catch(e) { 
+    } catch (e) {
         console.error("Fetch Sites Error:", e);
     }
     document.getElementById('loader').classList.add('hidden');
@@ -303,7 +303,7 @@ async function fetchSites() {
 
 function editEmployee(id) {
     const emp = allEmployees.find(e => String(e.id) === String(id));
-    if(!emp) return;
+    if (!emp) return;
     document.getElementById('editEmpId').value = emp.id;
     document.getElementById('empModalTitle').innerText = 'تعديل بيانات موظف';
     document.getElementById('empName').value = emp.name;
@@ -316,7 +316,7 @@ function editEmployee(id) {
 
 function editSite(id) {
     const site = allSites.find(s => String(s.id) === String(id));
-    if(!site) return;
+    if (!site) return;
     document.getElementById('editSiteId').value = site.id;
     document.getElementById('siteModalTitle').innerText = 'تعديل بيانات الموقع';
     document.getElementById('siteName').value = site.name;
@@ -328,24 +328,24 @@ function editSite(id) {
 }
 
 async function deleteEntity(action, id, name) {
-    if(!confirm(`هل أنت متأكد من حذف "${name}"؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
-    
+    if (!confirm(`هل أنت متأكد من حذف "${name}"؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
+
     document.getElementById('loader').classList.remove('hidden');
     try {
-        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action, id }), headers:{'Content-Type':'text/plain'} });
+        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action, id }), headers: { 'Content-Type': 'text/plain' } });
         const result = await res.json();
-        if(result.success) {
-            if(action === 'deleteEmployee') fetchEmployees();
+        if (result.success) {
+            if (action === 'deleteEmployee') fetchEmployees();
             else fetchSites();
         } else alert("خطأ في الحذف: " + result.message);
-    } catch(e) { console.error(e); alert("خطأ في الاتصال"); }
+    } catch (e) { console.error(e); alert("خطأ في الاتصال"); }
     document.getElementById('loader').classList.add('hidden');
 }
 
-function openEmployeeModal() { 
+function openEmployeeModal() {
     document.getElementById('editEmpId').value = '';
     document.getElementById('empModalTitle').innerText = 'إضافة موظف جديد';
-    document.getElementById('employeeModal').classList.remove('hidden'); 
+    document.getElementById('employeeModal').classList.remove('hidden');
 }
 function closeEmployeeModal() { document.getElementById('employeeModal').classList.add('hidden'); }
 
@@ -356,24 +356,24 @@ async function saveEmployee() {
     const pass = document.getElementById('empPass').value;
     const role = document.getElementById('empRole').value;
     const sites = document.getElementById('empSites').value;
-    
-    if(!name || !email || (!editId && !pass)) return alert("أكمل البيانات");
-    
+
+    if (!name || !email || (!editId && !pass)) return alert("أكمل البيانات");
+
     const payload = {
         action: editId ? 'updateEmployee' : 'saveEmployee',
         id: editId || ('EMP' + Math.floor(1000 + Math.random() * 9000)),
         name: name, email: email, password: pass, phone: "", role: role, assignedSites: sites
     };
-    
+
     document.getElementById('loader').classList.remove('hidden');
     try {
-        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers:{'Content-Type':'text/plain'} });
+        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'text/plain' } });
         const result = await res.json();
-        if(result.success) {
+        if (result.success) {
             closeEmployeeModal();
             fetchEmployees();
         } else alert("خطأ في الحفظ: " + result.message);
-    } catch(e) {
+    } catch (e) {
         console.error(e);
         alert("خطأ في الاتصال: " + e.message);
     }
@@ -386,25 +386,25 @@ function closeSiteModal() { document.getElementById('siteModal').classList.add('
 async function parseMapLink() {
     const link = document.getElementById('siteMapLink').value.trim();
     if (!link) return;
-    
+
     // Check if it's a short link
     if (link.includes('maps.app.goo.gl') || link.includes('goo.gl')) {
         document.getElementById('siteLat').placeholder = 'جاري استخراج البيانات...';
         document.getElementById('siteLng').placeholder = 'جاري استخراج البيانات...';
         try {
             const res = await fetch(API_URL, {
-                method: 'POST', body: JSON.stringify({ action: 'resolveMapLink', link: link }), headers:{'Content-Type':'text/plain'}
+                method: 'POST', body: JSON.stringify({ action: 'resolveMapLink', link: link }), headers: { 'Content-Type': 'text/plain' }
             });
             const result = await res.json();
             if (result.success) {
                 if (result.lat && result.lng) {
-                     document.getElementById('siteLat').value = result.lat;
-                     document.getElementById('siteLng').value = result.lng;
+                    document.getElementById('siteLat').value = result.lat;
+                    document.getElementById('siteLng').value = result.lng;
                 } else if (result.url) {
-                     extractLatLngFromUrl(result.url); // Fallback
+                    extractLatLngFromUrl(result.url); // Fallback
                 } else {
-                     document.getElementById('siteLat').placeholder = 'فشل المعالجة';
-                     document.getElementById('siteLng').placeholder = 'فشل المعالجة';
+                    document.getElementById('siteLat').placeholder = 'فشل المعالجة';
+                    document.getElementById('siteLng').placeholder = 'فشل المعالجة';
                 }
             } else {
                 throw new Error("Backend Error: " + result.message);
@@ -427,21 +427,21 @@ function extractLatLngFromUrl(url) {
         document.getElementById('siteLat').value = match[1];
         document.getElementById('siteLng').value = match[2];
     } else {
-         // Check for ?q=lat,lng format
-         const regexQ = /[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/;
-         const matchQ = url.match(regexQ);
-         if (matchQ) {
-             document.getElementById('siteLat').value = matchQ[1];
-             document.getElementById('siteLng').value = matchQ[2];
-         } else {
-             // Fallback for short link redirect formats that might contain place/name/lat,lng
-             const regexPath = /place\/[^\/]+\/(-?\d+\.\d+),(-?\d+\.\d+)/;
-             const matchPath = url.match(regexPath);
-             if (matchPath) {
-                 document.getElementById('siteLat').value = matchPath[1];
-                 document.getElementById('siteLng').value = matchPath[2];
-             }
-         }
+        // Check for ?q=lat,lng format
+        const regexQ = /[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/;
+        const matchQ = url.match(regexQ);
+        if (matchQ) {
+            document.getElementById('siteLat').value = matchQ[1];
+            document.getElementById('siteLng').value = matchQ[2];
+        } else {
+            // Fallback for short link redirect formats that might contain place/name/lat,lng
+            const regexPath = /place\/[^\/]+\/(-?\d+\.\d+),(-?\d+\.\d+)/;
+            const matchPath = url.match(regexPath);
+            if (matchPath) {
+                document.getElementById('siteLat').value = matchPath[1];
+                document.getElementById('siteLng').value = matchPath[2];
+            }
+        }
     }
 }
 
@@ -451,20 +451,20 @@ async function saveSite() {
     const lat = document.getElementById('siteLat').value.trim();
     const lng = document.getElementById('siteLng').value.trim();
     const radius = document.getElementById('siteRadius').value.trim();
-    
-    if(!name || !lat || !lng || !radius) return alert("الرجاء إكمال كافة البيانات");
-    
+
+    if (!name || !lat || !lng || !radius) return alert("الرجاء إكمال كافة البيانات");
+
     const payload = {
         action: editId ? 'updateSite' : 'saveSite',
-        id: editId || Math.floor(10000 + Math.random() * 90000), 
+        id: editId || Math.floor(10000 + Math.random() * 90000),
         name: name, latitude: lat, longitude: lng, radius: radius
     };
-    
+
     document.getElementById('loader').classList.remove('hidden');
     try {
-        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers:{'Content-Type':'text/plain'} });
+        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'text/plain' } });
         const result = await res.json();
-        if(result.success) {
+        if (result.success) {
             closeSiteModal();
             fetchSites();
             // Clear inputs
@@ -473,7 +473,7 @@ async function saveSite() {
             document.getElementById('siteLat').value = '';
             document.getElementById('siteLng').value = '';
             document.getElementById('siteRadius').value = '20';
-        } else { alert("خطأ في الحفظ: " + (result.message||'')); }
-    } catch(e) { console.error(e); alert("خطأ في الاتصال: " + e.message); }
+        } else { alert("خطأ في الحفظ: " + (result.message || '')); }
+    } catch (e) { console.error(e); alert("خطأ في الاتصال: " + e.message); }
     document.getElementById('loader').classList.add('hidden');
 }
