@@ -228,9 +228,23 @@ function doPost(e) {
     var ss = getSpreadsheet();
     var action = data.action;
 
-    // SEND MANUAL REPORT
+    // 1. CREATE TRIGGERS (Auto Reporting Schedule)
+    if (action === "createTriggers") {
+      try {
+        createTriggers();
+        return json({success:true});
+      } catch(e) {
+        return json({success:false, message: "خطأ في الجدولة: " + e.toString()});
+      }
+    }
+
+    // 2. SEND MANUAL REPORT (Manual Trigger)
     if (action === "sendManualReport") {
-      return sendManualReport(ss, data);
+      try {
+        return sendManualReport(getSpreadsheet(), data);
+      } catch(e) {
+        return json({success:false, message: "خطأ في إرسال التقرير: " + e.toString()});
+      }
     }
     
     // LOGIN
@@ -585,13 +599,13 @@ function sendDailyReport() {
   var records = getAttendanceInRange(start, end);
   if (records.length === 0) return;
 
-  var csvContent = generateCSV(records);
   var htmlTable = generateHTMLTable(records, "تقرير الحضور اليومي - " + today.toLocaleDateString('ar-EG'));
 
-  GmailApp.sendEmail(emails, "تقرير الحضور اليومي - " + today.toLocaleDateString('ar-EG'), 
-    "مرفق تقرير الحضور اليومي بصيغة CSV.", {
+  var title = "تقرير الحضور اليومي - " + today.toLocaleDateString('ar-EG');
+  GmailApp.sendEmail(emails, title, 
+    "مرفق تقرير الحضور اليومي بصيغة Excel الاحترافية.", {
     htmlBody: htmlTable,
-    attachments: [Utilities.newBlob(csvContent, 'text/csv', 'daily_report_' + today.toISOString().split('T')[0] + '.csv')],
+    attachments: [generateStyledExcel(records, title)],
     name: "نظام الموارد البشرية"
   });
 }
@@ -610,13 +624,12 @@ function sendManualReport(ss, data) {
   if (records.length === 0) return json({success:false, message: "لا توجد سجلات في هذه الفترة"});
 
   var title = "تقرير حضور مخصص: " + start.toLocaleDateString('ar-EG') + " إلى " + end.toLocaleDateString('ar-EG');
-  var csvContent = generateCSV(records);
   var htmlTable = generateHTMLTable(records, title);
 
   GmailApp.sendEmail(emails, title, 
-    "مرفق التقرير المخصص بصيغة CSV.", {
+    "مرفق التقرير المخصص بصيغة Excel الاحترافية.", {
     htmlBody: htmlTable,
-    attachments: [Utilities.newBlob(csvContent, 'text/csv', 'custom_report.csv')],
+    attachments: [generateStyledExcel(records, title)],
     name: "نظام الموارد البشرية"
   });
 
@@ -637,13 +650,13 @@ function sendMonthlyReport() {
   var records = getAttendanceInRange(start, end);
   if (records.length === 0) return;
 
-  var csvContent = generateCSV(records);
-  var htmlTable = generateHTMLTable(records, "التقرير الشهري - " + (now.getMonth() + 1) + "/" + now.getFullYear());
+  var title = "التقرير الشهري الشامل - " + (now.getMonth() + 1) + "/" + now.getFullYear();
+  var htmlTable = generateHTMLTable(records, title);
 
-  GmailApp.sendEmail(emails, "التقرير الشهري - " + (now.getMonth() + 1) + "/" + now.getFullYear(), 
-    "مرفق التقرير الشهري الشامل بصيغة CSV.", {
+  GmailApp.sendEmail(emails, title, 
+    "مرفق التقرير الشهري الشامل بصيغة Excel الاحترافية.", {
     htmlBody: htmlTable,
-    attachments: [Utilities.newBlob(csvContent, 'text/csv', 'monthly_report_' + now.getFullYear() + '_' + (now.getMonth() + 1) + '.csv')],
+    attachments: [generateStyledExcel(records, title)],
     name: "نظام الموارد البشرية"
   });
 }
@@ -671,48 +684,159 @@ function getAttendanceInRange(start, end) {
   });
 }
 
-function generateCSV(records) {
-  var lines = [["Employee ID", "Name", "Site", "Check-In", "Check-Out", "Status", "Hours", "Transport Allowance"].join(",")];
+function generateStyledExcel(records, reportTitle) {
+  var ss = SpreadsheetApp.create("temp_report_" + new Date().getTime());
+  var sheet = ss.getSheets()[0];
+  
+  // Headers
+  var headers = [
+    "اسم الموظف (Name)", 
+    "الموقع (Site)", 
+    "تاريخ ووقت الحضور", 
+    "تاريخ ووقت الانصراف", 
+    "الحالة (Status)", 
+    "إجمالي الساعات", 
+    "بدل الانتقال (EGP)"
+  ];
+  
+  sheet.appendRow([reportTitle]);
+  sheet.getRange("A1:G1").merge().setFontSize(14).setFontWeight("bold").setHorizontalAlignment("center").setBackground("#4f46e5").setFontColor("#ffffff");
+  
+  sheet.appendRow(headers);
+  sheet.getRange("A2:G2").setBackground("#f1f5f9").setFontWeight("bold").setHorizontalAlignment("center").setBorder(true, true, true, true, true, true);
+  
+  var totalTransport = 0;
   records.forEach(function(r) {
-    lines.push([
-      r.employeeId, r.employeeName, r.siteName, r.checkIn, r.checkOut, r.status, r.hours, r.transport
-    ].join(","));
+    var checkIn = r.checkIn ? new Date(r.checkIn) : "-";
+    var checkOut = r.checkOut ? new Date(r.checkOut) : "-";
+    var statusText = r.status || "present";
+    if (statusText === "late") statusText = "تأخير (Late)";
+    else if (statusText === "overtime") statusText = "إضافي (Overtime)";
+    else statusText = "حاضر (Present)";
+    
+    totalTransport += parseFloat(r.transport || 0);
+    sheet.appendRow([
+      r.employeeName,
+      r.siteName,
+      checkIn,
+      checkOut,
+      statusText,
+      r.hours || "0",
+      r.transport || "0"
+    ]);
   });
-  return lines.join("\n");
+  
+  // Apply formatting to data rows
+  var lastRow = sheet.getLastRow();
+  if (lastRow > 2) {
+    var dataRange = sheet.getRange(3, 1, lastRow - 2, 7);
+    dataRange.setBorder(true, true, true, true, true, true).setHorizontalAlignment("center");
+    
+    // Alt row colors
+    for (var i = 3; i <= lastRow; i++) {
+       if (i % 2 === 0) sheet.getRange(i, 1, 1, 7).setBackground("#f8fafc");
+    }
+  }
+
+  // Footer / Total
+  sheet.appendRow(["", "", "", "", "", "الإجمالي:", totalTransport + " ج.م"]);
+  sheet.getRange(lastRow + 1, 6, 1, 2).setFontWeight("bold").setBackground("#f0fdf4").setFontColor("#166534");
+
+  sheet.setColumnWidths(1, 1, 150);
+  sheet.setColumnWidths(2, 6, 120);
+  sheet.setColumnWidth(7, 100);
+  sheet.setRightToLeft(true);
+
+  SpreadsheetApp.flush();
+  
+  var blob = DriveApp.getFileById(ss.getId()).getBlob().setName(reportTitle + ".xlsx");
+  
+  // Cleanup
+  DriveApp.getFileById(ss.getId()).setTrashed(true);
+  
+  return blob;
 }
 
 function generateHTMLTable(records, title) {
   var totalTransport = 0;
+  var totalHours = 0;
+  var uniqueEmployees = new Set();
+  var totalLates = 0;
+
   var rows = records.map(function(r) {
     totalTransport += parseFloat(r.transport || 0);
+    totalHours += parseFloat(r.hours || 0);
+    uniqueEmployees.add(r.employeeId);
+    if(r.status === 'late') totalLates++;
+
+    var statusColor = "#10b981"; // success
+    var statusText = "حاضر";
+    if(r.status === 'late') { statusColor = "#ef4444"; statusText = "متأخر"; }
+    else if(r.status === 'overtime') { statusColor = "#3b82f6"; statusText = "إضافي"; }
+
     return `
-      <tr style="border-bottom: 1px solid #ddd;">
-        <td style="padding: 10px;">${r.employeeName}</td>
-        <td style="padding: 10px;">${r.siteName}</td>
-        <td style="padding: 10px;">${new Date(r.checkIn).toLocaleString('ar-EG')}</td>
-        <td style="padding: 10px;">${r.status}</td>
-        <td style="padding: 10px;">${r.transport} ج.م</td>
+      <tr style="border-bottom: 1px solid #edf2f7;">
+        <td style="padding: 12px 8px; color: #1a202c; font-weight: 500;">${r.employeeName}</td>
+        <td style="padding: 12px 8px; color: #4a5568;">${r.siteName}</td>
+        <td style="padding: 12px 8px; color: #4a5568; font-size: 0.85rem;" dir="ltr">${new Date(r.checkIn).toLocaleString('ar-EG', {hour:'2-digit', minute:'2-digit', day:'2-digit', month:'2-digit'})}</td>
+        <td style="padding: 12px 8px;">
+          <span style="background-color: ${statusColor}15; color: ${statusColor}; padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: bold;">${statusText}</span>
+        </td>
+        <td style="padding: 12px 8px; color: #2d3748; font-weight: bold;">${parseFloat(r.transport || 0).toFixed(2)} ج.م</td>
       </tr>
     `;
   }).join("");
 
   return `
-    <div dir="rtl" style="font-family: Arial, sans-serif; max-width: 800px; margin: auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
-      <h2 style="color: #4f46e5; text-align: center;">${title}</h2>
-      <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
-        <thead>
-          <tr style="background: #f8fafc; text-align: right;">
-            <th style="padding: 10px;">الموظف</th>
-            <th style="padding: 10px;">الموقع</th>
-            <th style="padding: 10px;">الوقت</th>
-            <th style="padding: 10px;">الحالة</th>
-            <th style="padding: 10px;">بدل الانتقال</th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
-      <div style="margin-top: 20px; text-align: left; font-weight: bold; font-size: 1.1rem; color: #1e293b;">
-        إجمالي البدلات: ${totalTransport.toFixed(2)} ج.م
+    <div dir="rtl" style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 700px; margin: 20px auto; padding: 30px; border: 1px solid #e2e8f0; border-radius: 16px; background-color: #ffffff; color: #2d3748;">
+      
+      <!-- Header -->
+      <div style="text-align: center; margin-bottom: 30px; border-bottom: 2px solid #4f46e5; padding-bottom: 15px;">
+        <h1 style="color: #4f46e5; margin: 0; font-size: 1.6rem;">${title}</h1>
+        <p style="color: #718096; margin-top: 5px; font-size: 0.9rem;">نظام إدارة الموارد البشرية الذكي</p>
+      </div>
+
+      <!-- Summary Cards -->
+      <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 30px; text-align: center;">
+        <div style="flex: 1; min-width: 140px; background: #f8fafc; padding: 15px; border-radius: 12px; border: 1px solid #e2e8f0;">
+          <div style="font-size: 0.75rem; color: #64748b; margin-bottom: 5px;">الموظفين</div>
+          <div style="font-size: 1.25rem; font-weight: bold; color: #4f46e5;">${uniqueEmployees.size}</div>
+        </div>
+        <div style="flex: 1; min-width: 140px; background: #f8fafc; padding: 15px; border-radius: 12px; border: 1px solid #e2e8f0;">
+          <div style="font-size: 0.75rem; color: #64748b; margin-bottom: 5px;">إجمالي الساعات</div>
+          <div style="font-size: 1.25rem; font-weight: bold; color: #4f46e5;">${totalHours.toFixed(1)}</div>
+        </div>
+        <div style="flex: 1; min-width: 140px; background: #fdf2f2; padding: 15px; border-radius: 12px; border: 1px solid #fee2e2;">
+          <div style="font-size: 0.75rem; color: #991b1b; margin-bottom: 5px;">التأخيرات</div>
+          <div style="font-size: 1.25rem; font-weight: bold; color: #dc2626;">${totalLates}</div>
+        </div>
+        <div style="flex: 1; min-width: 140px; background: #f0fdf4; padding: 15px; border-radius: 12px; border: 1px solid #dcfce7;">
+          <div style="font-size: 0.75rem; color: #166534; margin-bottom: 5px;">إجمالي البدلات</div>
+          <div style="font-size: 1.25rem; font-weight: bold; color: #16a34a;">${totalTransport.toFixed(0)} <span style="font-size: 0.7rem;">ج.م</span></div>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse;">
+          <thead>
+            <tr style="background: #f1f5f9; text-align: right;">
+              <th style="padding: 12px 8px; color: #475569; font-size: 0.85rem;">الموظف</th>
+              <th style="padding: 12px 8px; color: #475569; font-size: 0.85rem;">الموقع</th>
+              <th style="padding: 12px 8px; color: #475569; font-size: 0.85rem;">الوقت</th>
+              <th style="padding: 12px 8px; color: #475569; font-size: 0.85rem;">الحالة</th>
+              <th style="padding: 12px 8px; color: #475569; font-size: 0.85rem;">البدل</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Footer -->
+      <div style="margin-top: 30px; padding-top: 15px; border-top: 1px solid #e2e8f0; font-size: 0.75rem; color: #94a3b8; text-align: center;">
+        تم توليد هذا التقرير آلياً بواسطة نظام HR المطور. المرفق يحتوي على كافة التفاصيل بصيغة Excel.
       </div>
     </div>
   `;
