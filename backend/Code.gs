@@ -586,26 +586,24 @@ function doPost(e) {
 function sendDailyReport() {
   var settings = getSettingsObject();
   if (settings.dailyReportEnabled !== "true") return;
-  
   var emails = settings.reportEmails;
   if (!emails) return;
 
-  var today = new Date();
-  var start = new Date(today);
+  var start = new Date();
   start.setHours(0,0,0,0);
-  var end = new Date(today);
+  var end = new Date();
   end.setHours(23,59,59,999);
 
-  var records = getAttendanceInRange(start, end);
+  var records = getAttendanceInRange(start, end, "all");
   if (records.length === 0) return;
 
-  var htmlTable = generateHTMLTable(records, "تقرير الحضور اليومي - " + today.toLocaleDateString('ar-EG'));
+  var title = "التقرير اليومي للحضور وانصراف الموظفين - " + start.toLocaleDateString('ar-EG');
+  var htmlTable = generateHTMLTable(records, title);
+  var excelFile = generateStyledExcel(records, title);
 
-  var title = "تقرير الحضور اليومي - " + today.toLocaleDateString('ar-EG');
-  GmailApp.sendEmail(emails, title, 
-    "مرفق تقرير الحضور اليومي بصيغة Excel الاحترافية.", {
+  GmailApp.sendEmail(emails, title, "مرفق التقرير اليومي بصيغة Excel الاحترافية.", {
     htmlBody: htmlTable,
-    attachments: [generateStyledExcel(records, title)],
+    attachments: [excelFile],
     name: "نظام الموارد البشرية"
   });
 }
@@ -644,24 +642,23 @@ function sendManualReport(ss, data) {
 function sendMonthlyReport() {
   var settings = getSettingsObject();
   if (settings.monthlyReportEnabled !== "true") return;
-  
   var emails = settings.reportEmails;
   if (!emails) return;
 
   var now = new Date();
   var start = new Date(now.getFullYear(), now.getMonth(), 1);
-  var end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+  var end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
 
-  var records = getAttendanceInRange(start, end);
+  var records = getAttendanceInRange(start, end, "all");
   if (records.length === 0) return;
 
-  var title = "التقرير الشهري الشامل - " + (now.getMonth() + 1) + "/" + now.getFullYear();
+  var title = "التقرير الشهري الشامل - " + start.toLocaleDateString('ar-EG', {month:'long', year:'numeric'});
   var htmlTable = generateHTMLTable(records, title);
+  var excelFile = generateStyledExcel(records, title);
 
-  GmailApp.sendEmail(emails, title, 
-    "مرفق التقرير الشهري الشامل بصيغة Excel الاحترافية.", {
+  GmailApp.sendEmail(emails, title, "مرفق التقرير الشهري الشامل بصيغة Excel الاحترافية.", {
     htmlBody: htmlTable,
-    attachments: [generateStyledExcel(records, title)],
+    attachments: [excelFile],
     name: "نظام الموارد البشرية"
   });
 }
