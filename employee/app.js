@@ -473,6 +473,25 @@ async function submitSiteRequest() {
     if (!name) return alert("يرجى إدخال اسم الموقع");
     if (!lastLocation) return alert("يجب توفير إحداثيات الموقع");
 
+    document.getElementById('loader').classList.remove('hidden');
+    
+    // Validate that the link matches the current location (within 1000m)
+    if (link) {
+        try {
+            const res = await fetch(API_URL, {
+                method: 'POST', body: JSON.stringify({ action: 'resolveMapLink', link: link }), headers:{'Content-Type':'text/plain'}
+            });
+            const result = await res.json();
+            if (result.success && result.lat && result.lng) {
+                const dist = getDistanceFromLatLonInM(lastLocation.lat, lastLocation.lng, parseFloat(result.lat), parseFloat(result.lng));
+                if (dist > 1000) {
+                    document.getElementById('loader').classList.add('hidden');
+                    return alert(`❌ خطأ: الرابط يشير لمكان يبعد عنك ${(dist/1000).toFixed(2)} كم. يجب أن يكون الرابط لمكانك الحالي (بحد أقصى 1000 متر).`);
+                }
+            }
+        } catch(e) { console.warn("Failed to validate link distance", e); }
+    }
+
     const payload = {
         action: 'addSiteRequest',
         employeeId: currentUser.id,
@@ -569,6 +588,7 @@ function renderMyReports(data, monthStr) {
     }
 
     let totalHours = 0;
+    let totalTransport = 0;
     
     const tbody = document.getElementById('myReportsTableBody');
     tbody.innerHTML = '';
@@ -583,11 +603,13 @@ function renderMyReports(data, monthStr) {
     // Add Present Records
     presentRecords.forEach(record => {
         if(record.totalHours) totalHours += parseFloat(record.totalHours);
+        if(record.transportPrice) totalTransport += parseFloat(record.transportPrice);
         fullReport.push({
             date: new Date(record.checkIn),
             checkIn: record.checkIn,
             checkOut: record.checkOut,
             status: record.status, // 'present' or 'late'
+            transport: record.transportPrice || 0,
             type: 'entry'
         });
     });
@@ -624,6 +646,7 @@ function renderMyReports(data, monthStr) {
                     <td data-label="التاريخ">${item.date.toLocaleDateString('ar-EG')}</td>
                     <td data-label="الحضور" dir="ltr">${new Date(item.checkIn).toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'})}</td>
                     <td data-label="الانصراف" dir="ltr">${item.checkOut ? new Date(item.checkOut).toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'}) : '-'}</td>
+                    <td data-label="البدل">${item.transport} ج.م</td>
                     <td data-label="الحالة"><span style="color:${statusColor}">${statusText}</span></td>
                 </tr>
             `;
@@ -632,7 +655,7 @@ function renderMyReports(data, monthStr) {
             tbody.innerHTML += `
                 <tr style="background: rgba(239, 68, 68, 0.05);">
                     <td data-label="التاريخ">${item.date.toLocaleDateString('ar-EG')}</td>
-                    <td data-label="التفاصيل" colspan="2" style="text-align:center !important; color:var(--danger); font-size:0.8rem;">غائب (لم يتم تسجيل حضور)</td>
+                    <td data-label="التفاصيل" colspan="3" style="text-align:center !important; color:var(--danger); font-size:0.8rem;">غائب (لم يتم تسجيل حضور)</td>
                     <td data-label="الحالة"><span style="color:var(--danger)">غائب</span></td>
                 </tr>
             `;
@@ -645,4 +668,5 @@ function renderMyReports(data, monthStr) {
     document.getElementById('empTotalAbsent').innerText = totalAbsent > 0 ? totalAbsent : 0;
     document.getElementById('empTotalLates').innerText = totalLates;
     document.getElementById('empTotalHours').innerText = totalHours.toFixed(2);
+    document.getElementById('empTotalTransport').innerText = totalTransport.toFixed(2) + " ج.م";
 }

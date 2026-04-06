@@ -162,6 +162,7 @@
                                 <th style="padding: 15px;">البريد</th>
                                 <th style="padding: 15px;">الهاتف</th>
                                 <th style="padding: 15px;">الصلاحية</th>
+                                <th style="padding: 15px;">البدل</th>
                                 <th style="padding: 15px;">البصمة</th>
                                 <th style="padding: 15px;">الإجراءات</th>
                             </tr>
@@ -185,6 +186,7 @@
                                 <th style="padding: 15px;">خط العرض (Lat)</th>
                                 <th style="padding: 15px;">خط الطول (Lng)</th>
                                 <th style="padding: 15px;">النطاق (متر)</th>
+                                <th style="padding: 15px;">البدل</th>
                                 <th style="padding: 15px;">الإجراءات</th>
                             </tr>
                         </thead>
@@ -235,9 +237,22 @@
                         <button class="btn-primary" onclick="saveSettings()">حفظ الإعدادات</button>
                     </div>
                     
-                    <div class="glass-card" style="padding:25px; opacity:0.7;">
-                        <h3 style="margin-bottom:20px; color:var(--text-muted);">إعدادات متقدمة (قريباً)</h3>
-                        <p style="font-size:0.9rem; color:var(--text-muted);">سيتم إضافة ميزات مثل: أيام الإجازات السنوية، الربط مع أنظمة الرواتب، وتخصيص التقارير.</p>
+                    <div class="glass-card" style="padding:25px;">
+                        <h3 style="margin-bottom:20px; color:var(--secondary);">إعدادات التقارير التلقائية</h3>
+                        <div class="input-group">
+                            <label>إيميلات استلام التقارير (مفصولة بفاصلة)</label>
+                            <input type="text" id="setReportEmails" placeholder="example@mail.com, boss@mail.com">
+                        </div>
+                        <div style="display:flex; gap:20px; margin-bottom:15px;">
+                            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                                <input type="checkbox" id="setDailyReport"> تفعيل التقرير اليومي
+                            </label>
+                            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                                <input type="checkbox" id="setMonthlyReport"> تفعيل التقرير الشهري
+                            </label>
+                        </div>
+                        <button class="btn-primary" onclick="saveSettings()">حفظ إعدادات التقارير</button>
+                        <button class="btn-primary" style="background:var(--secondary); margin-top:10px;" onclick="setupTriggers()">تنشيط الجدولة التلقائية 🚀</button>
                     </div>
                 </div>
             </div>
@@ -272,11 +287,39 @@
                     <option value="hr">إدارة (HR)</option>
                 </select>
             </div>
+            <div class="input-group">
+                <label>سعر الانقال الافتراضي (ج.م)</label>
+                <input type="number" id="empTransportPrice" value="0">
+            </div>
             
             <div style="display:flex; gap:10px;">
                 <button class="btn-primary" onclick="saveEmployee()">حفظ</button>
                 <button class="btn-danger" style="background:transparent; border:1px solid var(--danger);" onclick="closeEmployeeModal()">إلغاء</button>
             </div>
+        </div>
+    </div>
+
+    <div id="approveRequestModal" class="modal hidden">
+        <div class="modal-content">
+            <input type="hidden" id="approveReqId">
+            <h3 style="margin-bottom:15px;">الموافقة على تسجيل موقع</h3>
+            <div class="input-group">
+                <label>تأكيد اسم الموقع</label>
+                <input type="text" id="approveSiteName">
+            </div>
+            <div class="input-group">
+                <label>سعر الانتقال لهذا الطلب (ج.م)</label>
+                <input type="number" id="approveTransportPrice" value="120">
+            </div>
+            <div class="input-group">
+                <label>النطاق (متر)</label>
+                <input type="number" id="approveRadius" value="100">
+            </div>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                <button class="btn-primary" onclick="confirmApproval('always')">موافقة دائمة (حفظ)</button>
+                <button class="btn-primary" style="background:#22c55e;" onclick="confirmApproval('today')">موافقة لليوم فقط</button>
+            </div>
+            <button class="btn-danger" style="background:transparent; border:1px solid var(--danger); width:100%; margin-top:10px;" onclick="closeApproveModal()">إلغاء</button>
         </div>
     </div>
 
@@ -306,6 +349,10 @@
             <div class="input-group">
                 <label>نطاق الحضور المسموح (الـ Radius بالمتر)</label>
                 <input type="number" id="siteRadius" value="20">
+            </div>
+            <div class="input-group">
+                <label>سعر الانتقال لهذا الموقع (ج.م)</label>
+                <input type="number" id="siteTransportPrice" value="120">
             </div>
             
             <div style="display:flex; gap:10px; margin-top:10px;">

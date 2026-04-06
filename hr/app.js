@@ -321,6 +321,7 @@ async function fetchEmployees() {
                     <td data-label="البريد">${record.email}</td>
                     <td data-label="الهاتف">${record.phone || '-'}</td>
                     <td data-label="الصلاحية">${record.role}</td>
+                    <td data-label="البدل">${record.transportPrice || 0} ج.م</td>
                     <td data-label="البصمة">${record.faceDescriptor ? '✅ مسجل' : '❌ لا يوجد'}</td>
                     <td data-label="الإجراءات" style="display:flex; gap:8px; justify-content:center; padding:10px;">
                         <button class="btn-primary" style="padding:5px 12px; font-size:0.85rem; width:auto;" onclick="editEmployee('${record.id}')">تعديل ✏️</button>
@@ -353,6 +354,7 @@ async function fetchSites() {
                     <td data-label="خط العرض">${record.latitude}</td>
                     <td data-label="خط الطول">${record.longitude}</td>
                     <td data-label="النطاق">${record.radius} متر</td>
+                    <td data-label="البدل">${record.transportPrice || 0} ج.م</td>
                     <td data-label="الإجراءات" style="display:flex; gap:8px; justify-content:center; padding:10px;">
                         <button class="btn-primary" style="padding:5px 12px; font-size:0.85rem; width:auto;" onclick="editSite('${record.id}')">تعديل ✏️</button>
                         <button class="btn-danger" style="padding:5px 12px; font-size:0.85rem; width:auto; background:rgba(239,68,68,0.1); border:1px solid var(--danger); color:var(--danger);" onclick="deleteEntity('deleteSite', '${record.id}', '${record.name}')">حذف 🗑️</button>
@@ -376,6 +378,7 @@ function editEmployee(id) {
     document.getElementById('empEmail').value = emp.email;
     document.getElementById('empPass').value = ''; // Don't show password for security
     document.getElementById('empRole').value = emp.role;
+    document.getElementById('empTransportPrice').value = emp.transportPrice || 0;
     document.getElementById('empSites').value = Array.isArray(emp.assignedSites) ? emp.assignedSites.join(',') : emp.assignedSites;
     openEmployeeModal();
 }
@@ -390,6 +393,7 @@ function editSite(id) {
     document.getElementById('siteLat').value = site.latitude;
     document.getElementById('siteLng').value = site.longitude;
     document.getElementById('siteRadius').value = site.radius;
+    document.getElementById('siteTransportPrice').value = site.transportPrice || 120;
     openSiteModal();
 }
 
@@ -428,7 +432,8 @@ async function saveEmployee() {
     const payload = {
         action: editId ? 'updateEmployee' : 'saveEmployee',
         id: editId || ('EMP' + Math.floor(1000 + Math.random() * 9000)),
-        name: name, email: email, password: pass, phone: "", role: role, assignedSites: sites
+        name: name, email: email, password: pass, phone: "", role: role, assignedSites: sites,
+        transportPrice: document.getElementById('empTransportPrice').value || 0
     };
     
     document.getElementById('loader').classList.remove('hidden');
@@ -523,7 +528,8 @@ async function saveSite() {
     const payload = {
         action: editId ? 'updateSite' : 'saveSite',
         id: editId || Math.floor(10000 + Math.random() * 90000), 
-        name: name, latitude: lat, longitude: lng, radius: radius
+        name: name, latitude: lat, longitude: lng, radius: radius,
+        transportPrice: document.getElementById('siteTransportPrice').value || 120
     };
     
     document.getElementById('loader').classList.remove('hidden');
@@ -568,6 +574,11 @@ async function fetchSettings() {
 
             document.getElementById('setWorkStartTime').value = start;
             document.getElementById('setWorkEndTime').value = end;
+            
+            // Reports settings
+            document.getElementById('setReportEmails').value = result.data.reportEmails || "";
+            document.getElementById('setDailyReport').checked = result.data.dailyReportEnabled === "true";
+            document.getElementById('setMonthlyReport').checked = result.data.monthlyReportEnabled === "true";
         }
     } catch (e) {
         console.error("Fetch Settings error", e);
@@ -578,10 +589,9 @@ async function fetchSettings() {
 async function saveSettings() {
     const workStartTime = document.getElementById('setWorkStartTime').value;
     const workEndTime = document.getElementById('setWorkEndTime').value;
-
-    if (!workStartTime || !workEndTime) {
-        return alert("الرجاء تحديد كافة المواعيد");
-    }
+    const reportEmails = document.getElementById('setReportEmails').value;
+    const dailyEnabled = document.getElementById('setDailyReport').checked;
+    const monthlyEnabled = document.getElementById('setMonthlyReport').checked;
 
     document.getElementById('loader').classList.remove('hidden');
     try {
@@ -589,7 +599,10 @@ async function saveSettings() {
             action: 'updateSettings',
             settings: {
                 workStartTime: workStartTime,
-                workEndTime: workEndTime
+                workEndTime: workEndTime,
+                reportEmails: reportEmails,
+                dailyReportEnabled: dailyEnabled ? "true" : "false",
+                monthlyReportEnabled: monthlyEnabled ? "true" : "false"
             }
         };
 
@@ -609,6 +622,21 @@ async function saveSettings() {
         console.error("Save settings error", e);
         alert("حدث خطأ في الاتصال");
     }
+    document.getElementById('loader').classList.add('hidden');
+}
+
+async function setupTriggers() {
+    if(!confirm("سيتم الآن تفعيل مواعيد إرسال التقارير التلقائية. هل أنت متأكد؟")) return;
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'createTriggers' }),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const result = await res.json();
+        alert(result.success ? "✅ تم تفعيل المواعيد بنجاح" : "❌ فشل التفعيل");
+    } catch(e) { alert("خطأ في الاتصال"); }
     document.getElementById('loader').classList.add('hidden');
 }
 
@@ -667,21 +695,41 @@ function renderSiteRequestsTable(data) {
 }
 
 async function approveRequest(id, suggestedName) {
-    const finalName = prompt("تأكيد اسم الموقع:", suggestedName);
-    if (finalName === null) return;
-    const finalRadius = prompt("تحديد نطاق الحضور (بالمتر):", "20");
-    if (!finalRadius) return;
+    document.getElementById('approveReqId').value = id;
+    document.getElementById('approveSiteName').value = suggestedName;
+    document.getElementById('approveTransportPrice').value = 120;
+    document.getElementById('approveRadius').value = 100;
+    document.getElementById('approveRequestModal').classList.remove('hidden');
+}
+
+function closeApproveModal() {
+    document.getElementById('approveRequestModal').classList.add('hidden');
+}
+
+async function confirmApproval(mode) {
+    const id = document.getElementById('approveReqId').value;
+    const name = document.getElementById('approveSiteName').value;
+    const transportPrice = document.getElementById('approveTransportPrice').value;
+    const radius = document.getElementById('approveRadius').value;
 
     document.getElementById('loader').classList.remove('hidden');
     try {
         const res = await fetch(API_URL, {
             method: 'POST',
-            body: JSON.stringify({ action: 'approveSiteRequest', id: id, name: finalName, radius: finalRadius }),
+            body: JSON.stringify({ 
+                action: 'approveSiteRequest', 
+                id: id, 
+                name: name, 
+                transportPrice: transportPrice, 
+                radius: radius,
+                mode: mode 
+            }),
             headers: { 'Content-Type': 'text/plain' }
         });
         const result = await res.json();
         if(result.success) {
             alert(result.message);
+            closeApproveModal();
             fetchSiteRequests();
         } else alert("خطأ: " + result.message);
     } catch(e) { console.error(e); alert("خطأ في الاتصال"); }
