@@ -669,6 +669,18 @@ function getSettingsObject() {
   return obj;
 }
 
+/////////////////////////////
+// 🔥 PERMISSIONS INITIALIZER
+// (Run this once manually if you get 'Permission denied')
+/////////////////////////////
+function initializePermissions() {
+  // Touching these services forces GAS to ask for authorization
+  DriveApp.getRootFolder();
+  GmailApp.getAliases();
+  SpreadsheetApp.getActive();
+  console.log("✅ All permissions requested. Please follow the popup instructions.");
+}
+
 function getAttendanceInRange(start, end) {
   var s = getOrCreateSheet("attendance", ["employeeId","employeeName","siteId","siteName","checkIn","checkOut","latitude","longitude","status","totalHours","transportPrice"]);
   var data = s.getDataRange().getValues();
@@ -685,76 +697,80 @@ function getAttendanceInRange(start, end) {
 }
 
 function generateStyledExcel(records, reportTitle) {
-  var ss = SpreadsheetApp.create("temp_report_" + new Date().getTime());
-  var sheet = ss.getSheets()[0];
-  
-  // Headers
-  var headers = [
-    "اسم الموظف (Name)", 
-    "الموقع (Site)", 
-    "تاريخ ووقت الحضور", 
-    "تاريخ ووقت الانصراف", 
-    "الحالة (Status)", 
-    "إجمالي الساعات", 
-    "بدل الانتقال (EGP)"
-  ];
-  
-  sheet.appendRow([reportTitle]);
-  sheet.getRange("A1:G1").merge().setFontSize(14).setFontWeight("bold").setHorizontalAlignment("center").setBackground("#4f46e5").setFontColor("#ffffff");
-  
-  sheet.appendRow(headers);
-  sheet.getRange("A2:G2").setBackground("#f1f5f9").setFontWeight("bold").setHorizontalAlignment("center").setBorder(true, true, true, true, true, true);
-  
-  var totalTransport = 0;
-  records.forEach(function(r) {
-    var checkIn = r.checkIn ? new Date(r.checkIn) : "-";
-    var checkOut = r.checkOut ? new Date(r.checkOut) : "-";
-    var statusText = r.status || "present";
-    if (statusText === "late") statusText = "تأخير (Late)";
-    else if (statusText === "overtime") statusText = "إضافي (Overtime)";
-    else statusText = "حاضر (Present)";
+  var ss;
+  try {
+    // 1. Create the temporary spreadsheet
+    ss = SpreadsheetApp.create("temp_report_" + new Date().getTime());
+    var sheet = ss.getSheets()[0];
     
-    totalTransport += parseFloat(r.transport || 0);
-    sheet.appendRow([
-      r.employeeName,
-      r.siteName,
-      checkIn,
-      checkOut,
-      statusText,
-      r.hours || "0",
-      r.transport || "0"
-    ]);
-  });
-  
-  // Apply formatting to data rows
-  var lastRow = sheet.getLastRow();
-  if (lastRow > 2) {
-    var dataRange = sheet.getRange(3, 1, lastRow - 2, 7);
-    dataRange.setBorder(true, true, true, true, true, true).setHorizontalAlignment("center");
+    // Headers & Styling
+    var headers = ["اسم الموظف (Name)", "الموقع (Site)", "تاريخ ووقت الحضور", "تاريخ ووقت الانصراف", "الحالة (Status)", "إجمالي الساعات", "بدل الانتقال (EGP)"];
+    sheet.appendRow([reportTitle]);
+    sheet.getRange("A1:G1").merge().setFontSize(14).setFontWeight("bold").setHorizontalAlignment("center").setBackground("#4f46e5").setFontColor("#ffffff");
+    sheet.appendRow(headers);
+    sheet.getRange("A2:G2").setBackground("#f1f5f9").setFontWeight("bold").setHorizontalAlignment("center").setBorder(true, true, true, true, true, true);
     
-    // Alt row colors
-    for (var i = 3; i <= lastRow; i++) {
-       if (i % 2 === 0) sheet.getRange(i, 1, 1, 7).setBackground("#f8fafc");
+    var totalTransport = 0;
+    records.forEach(function(r) {
+      totalTransport += parseFloat(r.transport || 0);
+      sheet.appendRow([
+        r.employeeName,
+        r.siteName,
+        r.checkIn ? new Date(r.checkIn) : "-",
+        r.checkOut ? new Date(r.checkOut) : "-",
+        r.status || "present",
+        r.hours || "0",
+        r.transport || "0"
+      ]);
+    });
+    
+    var lastRow = sheet.getLastRow();
+    if (lastRow > 2) {
+      sheet.getRange(3, 1, lastRow - 2, 7).setBorder(true, true, true, true, true, true).setHorizontalAlignment("center");
+      for (var i = 3; i <= lastRow; i++) if (i % 2 === 0) sheet.getRange(i, 1, 1, 7).setBackground("#f8fafc");
     }
+    sheet.appendRow(["", "", "", "", "", "الإجمالي:", totalTransport + " ج.م"]);
+    sheet.getRange(sheet.getLastRow(), 6, 1, 2).setFontWeight("bold").setBackground("#f0fdf4").setFontColor("#166534");
+    sheet.setColumnWidths(1, 1, 150);
+    sheet.setColumnWidths(2, 6, 120);
+    sheet.setRightToLeft(true);
+    SpreadsheetApp.flush();
+    
+    // 2. Try to get XLSX blob via DriveApp (Requires Permission)
+    var blob;
+    try {
+      blob = DriveApp.getFileById(ss.getId()).getBlob().setName(reportTitle + ".xlsx");
+      // Cleanup
+      try { DriveApp.getFileById(ss.getId()).setTrashed(true); } catch(trashErr) {}
+    } catch(driveError) {
+      // If Drive fails, this will fall through to the catch block below
+      throw driveError;
+    }
+    
+    return blob;
+
+  } catch(e) {
+    // Final safety cleanup (wrap in try to avoid secondary crashes)
+    if (ss) { try { DriveApp.getFileById(ss.getId()).setTrashed(true); } catch(t) {} }
+    
+    // 🚀 FALLBACK: Generate professional CSV if Excel/Drive fails
+    var BOM = "\uFEFF"; 
+    var csvHeaders = ["الاسم", "الموقع", "الحضور", "الانصراف", "الحالة", "الساعات", "البدل"];
+    var csvLines = [csvHeaders.join(",")];
+    records.forEach(function(r) {
+      var row = [
+        '"' + r.employeeName + '"',
+        '"' + r.siteName + '"',
+        '"' + (r.checkIn ? new Date(r.checkIn).toLocaleString('ar-EG') : "-") + '"',
+        '"' + (r.checkOut ? new Date(r.checkOut).toLocaleString('ar-EG') : "-") + '"',
+        '"' + (r.status || "حاضر") + '"',
+        '"' + (r.hours || "0") + '"',
+        '"' + (r.transport || "0") + '"'
+      ];
+      csvLines.push(row.join(","));
+    });
+    return Utilities.newBlob(BOM + csvLines.join("\n"), 'text/csv', reportTitle + ".csv");
   }
-
-  // Footer / Total
-  sheet.appendRow(["", "", "", "", "", "الإجمالي:", totalTransport + " ج.م"]);
-  sheet.getRange(lastRow + 1, 6, 1, 2).setFontWeight("bold").setBackground("#f0fdf4").setFontColor("#166534");
-
-  sheet.setColumnWidths(1, 1, 150);
-  sheet.setColumnWidths(2, 6, 120);
-  sheet.setColumnWidth(7, 100);
-  sheet.setRightToLeft(true);
-
-  SpreadsheetApp.flush();
-  
-  var blob = DriveApp.getFileById(ss.getId()).getBlob().setName(reportTitle + ".xlsx");
-  
-  // Cleanup
-  DriveApp.getFileById(ss.getId()).setTrashed(true);
-  
-  return blob;
 }
 
 function generateHTMLTable(records, title) {
