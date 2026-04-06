@@ -736,24 +736,26 @@ function generateStyledExcel(records, reportTitle) {
     sheet.setRightToLeft(true);
     SpreadsheetApp.flush();
     
-    // 2. Try to get XLSX blob via DriveApp (Requires Permission)
-    var blob;
-    try {
-      blob = DriveApp.getFileById(ss.getId()).getBlob().setName(reportTitle + ".xlsx");
-      // Cleanup
-      try { DriveApp.getFileById(ss.getId()).setTrashed(true); } catch(trashErr) {}
-    } catch(driveError) {
-      // If Drive fails, this will fall through to the catch block below
-      throw driveError;
-    }
+    // 2. 🚀 THE FIX: Correctly export as a real XLSX file using the export URL
+    var url = "https://docs.google.com/spreadsheets/d/" + ss.getId() + "/export?format=xlsx";
+    var res = UrlFetchApp.fetch(url, {
+      headers: { Authorization: "Bearer " + ScriptApp.getOAuthToken() },
+      muteHttpExceptions: true
+    });
+    
+    var blob = res.getBlob().setName(reportTitle + ".xlsx");
+    
+    // Cleanup the temp sheet
+    try { DriveApp.getFileById(ss.getId()).setTrashed(true); } catch(trashErr) {}
     
     return blob;
 
   } catch(e) {
-    // Final safety cleanup (wrap in try to avoid secondary crashes)
+    console.error("XLSX Export failed:", e);
+    // Final safety cleanup 
     if (ss) { try { DriveApp.getFileById(ss.getId()).setTrashed(true); } catch(t) {} }
     
-    // 🚀 FALLBACK: Generate professional CSV if Excel/Drive fails
+    // 🚀 FALLBACK: Generate professional CSV if Excel/Drive/URL Fetch fails
     var BOM = "\uFEFF"; 
     var csvHeaders = ["الاسم", "الموقع", "الحضور", "الانصراف", "الحالة", "الساعات", "البدل"];
     var csvLines = [csvHeaders.join(",")];
@@ -790,69 +792,83 @@ function generateHTMLTable(records, title) {
     if(r.status === 'late') { statusColor = "#ef4444"; statusText = "متأخر"; }
     else if(r.status === 'overtime') { statusColor = "#3b82f6"; statusText = "إضافي"; }
 
+    var checkInStr = r.checkIn ? new Date(r.checkIn).toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'}) : "-";
+    var checkOutStr = r.checkOut ? new Date(r.checkOut).toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'}) : "-";
+
     return `
       <tr style="border-bottom: 1px solid #edf2f7;">
-        <td style="padding: 12px 8px; color: #1a202c; font-weight: 500;">${r.employeeName}</td>
-        <td style="padding: 12px 8px; color: #4a5568;">${r.siteName}</td>
-        <td style="padding: 12px 8px; color: #4a5568; font-size: 0.85rem;" dir="ltr">${new Date(r.checkIn).toLocaleString('ar-EG', {hour:'2-digit', minute:'2-digit', day:'2-digit', month:'2-digit'})}</td>
-        <td style="padding: 12px 8px;">
-          <span style="background-color: ${statusColor}15; color: ${statusColor}; padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: bold;">${statusText}</span>
+        <td style="padding: 14px 8px; color: #111827; font-weight: 600; font-size: 0.95rem;">${r.employeeName}</td>
+        <td style="padding: 14px 8px; color: #374151; font-size: 0.9rem;">${r.siteName}</td>
+        <td style="padding: 14px 8px; color: #374151; font-size: 0.85rem;" dir="ltr">
+          <div style="font-weight: bold; color: #059669;">↓ ${checkInStr}</div>
+          <div style="color: #6b7280; margin-top: 2px;">↑ ${checkOutStr}</div>
         </td>
-        <td style="padding: 12px 8px; color: #2d3748; font-weight: bold;">${parseFloat(r.transport || 0).toFixed(2)} ج.م</td>
+        <td style="padding: 14px 8px; text-align: center;">
+          <span style="background-color: ${statusColor}; color: white; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: bold; white-space: nowrap;">${statusText}</span>
+        </td>
+        <td style="padding: 14px 8px; color: #111827; font-weight: 800; text-align: left;">${parseFloat(r.transport || 0).toFixed(0)} <span style="font-size: 0.7rem; color: #6b7280;">ج.م</span></td>
       </tr>
     `;
   }).join("");
 
   return `
-    <div dir="rtl" style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 700px; margin: 20px auto; padding: 30px; border: 1px solid #e2e8f0; border-radius: 16px; background-color: #ffffff; color: #2d3748;">
+    <div dir="rtl" style="font-family: 'Tajawal', 'Segoe UI', Tahoma, sans-serif; max-width: 650px; margin: 0 auto; background-color: #f9fafb; padding: 15px; border-radius: 0;">
       
-      <!-- Header -->
-      <div style="text-align: center; margin-bottom: 30px; border-bottom: 2px solid #4f46e5; padding-bottom: 15px;">
-        <h1 style="color: #4f46e5; margin: 0; font-size: 1.6rem;">${title}</h1>
-        <p style="color: #718096; margin-top: 5px; font-size: 0.9rem;">نظام إدارة الموارد البشرية الذكي</p>
-      </div>
+      <div style="background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); border: 1px solid #e5e7eb;">
+        
+        <!-- Header Section -->
+        <div style="background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); padding: 30px 20px; text-align: center; color: white;">
+          <h1 style="margin: 0; font-size: 1.8rem; font-weight: 800; letter-spacing: -0.025em;">${title}</h1>
+          <p style="margin: 10px 0 0 0; opacity: 0.9; font-size: 1rem;">نظام إدارة الموارد البشرية والتقارير الذكية</p>
+        </div>
 
-      <!-- Summary Cards -->
-      <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 30px; text-align: center;">
-        <div style="flex: 1; min-width: 140px; background: #f8fafc; padding: 15px; border-radius: 12px; border: 1px solid #e2e8f0;">
-          <div style="font-size: 0.75rem; color: #64748b; margin-bottom: 5px;">الموظفين</div>
-          <div style="font-size: 1.25rem; font-weight: bold; color: #4f46e5;">${uniqueEmployees.size}</div>
+        <!-- Summary Statistics -->
+        <div style="padding: 20px; display: grid; gap: 12px; grid-template-columns: 1fr 1fr;">
+          <div style="background: #f8fafc; padding: 15px; border-radius: 12px; border: 1px solid #e2e8f0; text-align: center;">
+            <div style="font-size: 0.8rem; color: #64748b; font-weight: 600; margin-bottom: 4px;">إجمالي الموظفين</div>
+            <div style="font-size: 1.5rem; font-weight: 800; color: #4f46e5;">${uniqueEmployees.size}</div>
+          </div>
+          <div style="background: #f8fafc; padding: 15px; border-radius: 12px; border: 1px solid #e2e8f0; text-align: center;">
+            <div style="font-size: 0.8rem; color: #64748b; font-weight: 600; margin-bottom: 4px;">ساعات العمل</div>
+            <div style="font-size: 1.5rem; font-weight: 800; color: #4f46e5;">${totalHours.toFixed(1)}</div>
+          </div>
+          <div style="background: #fff1f2; padding: 15px; border-radius: 12px; border: 1px solid #fecdd3; text-align: center;">
+            <div style="font-size: 0.8rem; color: #be123c; font-weight: 600; margin-bottom: 4px;">حالات التأخير</div>
+            <div style="font-size: 1.5rem; font-weight: 800; color: #e11d48;">${totalLates}</div>
+          </div>
+          <div style="background: #f0fdf4; padding: 15px; border-radius: 12px; border: 1px solid #dcfce7; text-align: center;">
+            <div style="font-size: 0.8rem; color: #15803d; font-weight: 600; margin-bottom: 4px;">إجمالي البدلات</div>
+            <div style="font-size: 1.5rem; font-weight: 800; color: #16a34a;">${totalTransport.toFixed(0)} <span style="font-size: 0.8rem;">ج.م</span></div>
+          </div>
         </div>
-        <div style="flex: 1; min-width: 140px; background: #f8fafc; padding: 15px; border-radius: 12px; border: 1px solid #e2e8f0;">
-          <div style="font-size: 0.75rem; color: #64748b; margin-bottom: 5px;">إجمالي الساعات</div>
-          <div style="font-size: 1.25rem; font-weight: bold; color: #4f46e5;">${totalHours.toFixed(1)}</div>
-        </div>
-        <div style="flex: 1; min-width: 140px; background: #fdf2f2; padding: 15px; border-radius: 12px; border: 1px solid #fee2e2;">
-          <div style="font-size: 0.75rem; color: #991b1b; margin-bottom: 5px;">التأخيرات</div>
-          <div style="font-size: 1.25rem; font-weight: bold; color: #dc2626;">${totalLates}</div>
-        </div>
-        <div style="flex: 1; min-width: 140px; background: #f0fdf4; padding: 15px; border-radius: 12px; border: 1px solid #dcfce7;">
-          <div style="font-size: 0.75rem; color: #166534; margin-bottom: 5px;">إجمالي البدلات</div>
-          <div style="font-size: 1.25rem; font-weight: bold; color: #16a34a;">${totalTransport.toFixed(0)} <span style="font-size: 0.7rem;">ج.م</span></div>
-        </div>
-      </div>
 
-      <!-- Table -->
-      <div style="overflow-x: auto;">
-        <table style="width: 100%; border-collapse: collapse;">
-          <thead>
-            <tr style="background: #f1f5f9; text-align: right;">
-              <th style="padding: 12px 8px; color: #475569; font-size: 0.85rem;">الموظف</th>
-              <th style="padding: 12px 8px; color: #475569; font-size: 0.85rem;">الموقع</th>
-              <th style="padding: 12px 8px; color: #475569; font-size: 0.85rem;">الوقت</th>
-              <th style="padding: 12px 8px; color: #475569; font-size: 0.85rem;">الحالة</th>
-              <th style="padding: 12px 8px; color: #475569; font-size: 0.85rem;">البدل</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rows}
-          </tbody>
-        </table>
-      </div>
+        <!-- Attendance Detail Table -->
+        <div style="padding: 0 10px 20px 10px;">
+          <div style="overflow-x: auto;">
+            <table style="width: 100%; border-collapse: collapse; min-width: 100%;">
+              <thead>
+                <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
+                  <th style="padding: 12px 8px; text-align: right; color: #475569; font-size: 0.85rem; font-weight: 700;">الموظف</th>
+                  <th style="padding: 12px 8px; text-align: right; color: #475569; font-size: 0.85rem; font-weight: 700;">الموقع</th>
+                  <th style="padding: 12px 8px; text-align: right; color: #475569; font-size: 0.85rem; font-weight: 700;">الوقت</th>
+                  <th style="padding: 12px 8px; text-align: center; color: #475569; font-size: 0.85rem; font-weight: 700;">الحالة</th>
+                  <th style="padding: 12px 8px; text-align: left; color: #475569; font-size: 0.85rem; font-weight: 700;">البدل</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows}
+              </tbody>
+            </table>
+          </div>
+        </div>
 
-      <!-- Footer -->
-      <div style="margin-top: 30px; padding-top: 15px; border-top: 1px solid #e2e8f0; font-size: 0.75rem; color: #94a3b8; text-align: center;">
-        تم توليد هذا التقرير آلياً بواسطة نظام HR المطور. المرفق يحتوي على كافة التفاصيل بصيغة Excel.
+        <!-- Footer -->
+        <div style="background-color: #f3f4f6; padding: 20px; text-align: center; color: #6b7280; font-size: 0.8rem; border-top: 1px solid #e5e7eb;">
+          <p style="margin: 0;">هذا التقرير تم استخراجه آلياً. المرفق يحتوي على كامل التفاصيل بصيغة Excel.</p>
+          <div style="margin-top: 10px;">
+            <strong>نظام إدارة الموارد البشرية الاحترافي © 2026</strong>
+          </div>
+        </div>
       </div>
     </div>
   `;
