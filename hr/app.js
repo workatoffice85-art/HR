@@ -171,8 +171,7 @@ function renderAttendanceTable(data) {
 
 // Reports Logic
 function generateReport() {
-    const startStr = document.getElementById('reportStartDate').value;
-    const endStr = document.getElementById('reportEndDate').value;
+    const empId = document.getElementById('reportEmployeeId').value;
     
     if(!startStr || !endStr || allAttendanceData.length === 0) return;
     
@@ -181,10 +180,12 @@ function generateReport() {
     const endDate = new Date(endStr);
     endDate.setHours(23,59,59,999);
 
-    // Filter records for the range
+    // Filter records for the range and employee
     const filtered = allAttendanceData.filter(record => {
         const d = new Date(record.checkIn);
-        return d >= startDate && d <= endDate;
+        const dateMatch = d >= startDate && d <= endDate;
+        const empMatch = (empId === 'all' || String(record.employeeId) === String(empId));
+        return dateMatch && empMatch;
     });
 
     const reportAcc = {};
@@ -280,6 +281,7 @@ function generateReport() {
 async function sendCustomReport() {
     const startStr = document.getElementById('reportStartDate').value;
     const endStr = document.getElementById('reportEndDate').value;
+    const empId = document.getElementById('reportEmployeeId').value;
     
     if(!startStr || !endStr) return alert("يرجى اختيار الفترة الزمنية أولاً");
 
@@ -292,7 +294,8 @@ async function sendCustomReport() {
             body: JSON.stringify({ 
                 action: 'sendManualReport', 
                 startDate: startStr, 
-                endDate: endStr 
+                endDate: endStr,
+                employeeId: empId
             }),
             headers: { 'Content-Type': 'text/plain' }
         });
@@ -359,8 +362,19 @@ async function fetchEmployees() {
         if(result.success) {
             allEmployees = result.data; // Store for editing
             const tbody = document.getElementById('employeesTableBody');
+            const reportSelect = document.getElementById('reportEmployeeId');
             tbody.innerHTML = '';
+            if (reportSelect) {
+                reportSelect.innerHTML = '<option value="all">الكل (All Employees)</option>';
+            }
+
             result.data.forEach(record => {
+                if (reportSelect) {
+                    const opt = document.createElement('option');
+                    opt.value = record.id;
+                    opt.innerText = record.name;
+                    reportSelect.appendChild(opt);
+                }
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td data-label="الاسم">${record.name}</td>
@@ -610,18 +624,13 @@ async function fetchSettings() {
         const res = await fetch(`${API_URL}?action=getSettings`);
         const result = await res.json();
         if (result.success) {
-            // Ensure time values are in HH:mm format for input[type="time"]
             let start = result.data.workStartTime || "09:00";
             let end = result.data.workEndTime || "17:00";
-            
-            // Basic normalization just in case
             if (start.match(/^\d:\d\d$/)) start = "0" + start;
             if (end.match(/^\d:\d\d$/)) end = "0" + end;
 
             document.getElementById('setWorkStartTime').value = start;
             document.getElementById('setWorkEndTime').value = end;
-            
-            // Reports settings
             document.getElementById('setReportEmails').value = result.data.reportEmails || "";
             document.getElementById('setDailyReport').checked = result.data.dailyReportEnabled === "true";
             document.getElementById('setMonthlyReport').checked = result.data.monthlyReportEnabled === "true";
