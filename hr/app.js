@@ -7,9 +7,15 @@ let hoursChartInstance = null;
 let latesChartInstance = null;
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Set default month/year for reports to current month
+    // Set default dates
     const now = new Date();
-    document.getElementById('reportMonth').value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const todayStr = now.toISOString().split('T')[0];
+    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+    
+    document.getElementById('attendanceDateFilter').value = todayStr;
+    document.getElementById('reportStartDate').value = firstDayOfMonth;
+    document.getElementById('reportEndDate').value = todayStr;
+    
     checkSession();
 });
 
@@ -114,10 +120,21 @@ async function fetchAttendance() {
 }
 
 function renderAttendanceTable(data) {
+    const filterDate = document.getElementById('attendanceDateFilter').value;
     const tbody = document.getElementById('attendanceTableBody');
     tbody.innerHTML = '';
+    
+    // Filter by date if selected
+    let filtered = data;
+    if (filterDate) {
+        filtered = data.filter(record => {
+            const d = new Date(record.checkIn);
+            return d.toISOString().split('T')[0] === filterDate;
+        });
+    }
+
     // Reverse to show newest first
-    [...data].reverse().forEach(record => {
+    [...filtered].reverse().forEach(record => {
         const cInObj = new Date(record.checkIn);
         const checkInTime = !isNaN(cInObj) ? cInObj.toLocaleString('ar-EG') : (record.checkIn || '-');
         
@@ -145,6 +162,7 @@ function renderAttendanceTable(data) {
                 <td data-label="وقت الحضور" dir="ltr">${checkInTime}</td>
                 <td data-label="وقت الانصراف" dir="ltr">${checkOutTime}</td>
                 <td data-label="إجمالي الساعات">${record.totalHours ? record.totalHours + ' ساعات' : '-'}</td>
+                <td data-label="بدل الانتقال">${record.transportPrice || 0} ج.م</td>
                 <td data-label="الحالة"><span style="color:${statusColor}">${statusText}</span></td>
             </tr>
         `;
@@ -153,23 +171,27 @@ function renderAttendanceTable(data) {
 
 // Reports Logic
 function generateReport() {
-    const monthVal = document.getElementById('reportMonth').value; // YYYY-MM
-    if(!monthVal || allAttendanceData.length === 0) return;
+    const startStr = document.getElementById('reportStartDate').value;
+    const endStr = document.getElementById('reportEndDate').value;
     
-    const targetYear = parseInt(monthVal.split('-')[0]);
-    const targetMonth = parseInt(monthVal.split('-')[1]) - 1; // 0-based
+    if(!startStr || !endStr || allAttendanceData.length === 0) return;
+    
+    const startDate = new Date(startStr);
+    startDate.setHours(0,0,0,0);
+    const endDate = new Date(endStr);
+    endDate.setHours(23,59,59,999);
 
-    // Filter records for the month
+    // Filter records for the range
     const filtered = allAttendanceData.filter(record => {
         const d = new Date(record.checkIn);
-        return d.getFullYear() === targetYear && d.getMonth() === targetMonth;
+        return d >= startDate && d <= endDate;
     });
 
     const reportAcc = {};
 
     filtered.forEach(record => {
         const empId = record.employeeId;
-        const recordDate = new Date(record.checkIn).toDateString(); // YYYY-MM-DD unique string
+        const recordDate = new Date(record.checkIn).toDateString(); 
         
         if(!reportAcc[empId]) {
              reportAcc[empId] = {
@@ -179,7 +201,8 @@ function generateReport() {
                  daysPresent: 0,
                  lates: 0,
                  overtime: 0,
-                 totalHours: 0
+                 totalHours: 0,
+                 totalTransport: 0
              };
         }
         
@@ -198,20 +221,17 @@ function generateReport() {
         }
         if(record.status === 'overtime') empStats.overtime += 1;
         if(record.totalHours) empStats.totalHours += parseFloat(record.totalHours);
+        if(record.transportPrice) empStats.totalTransport += parseFloat(record.transportPrice);
     });
 
-    // Calculate working days passed in the selected month
-    const now = new Date();
-    let workingDaysPassedCount = 0;
-    const endDay = (targetYear === now.getFullYear() && targetMonth === now.getMonth()) 
-                   ? now.getDate() 
-                   : new Date(targetYear, targetMonth + 1, 0).getDate();
-
-    for (let i = 1; i <= endDay; i++) {
-        const d = new Date(targetYear, targetMonth, i);
-        if (d.getDay() !== 5 && d.getDay() !== 6) { // Skip Fri/Sat
-            workingDaysPassedCount++;
+    // Calculate working days passed in the selected range
+    let workingDaysCount = 0;
+    let tempDate = new Date(startDate);
+    while (tempDate <= endDate) {
+        if (tempDate.getDay() !== 5 && tempDate.getDay() !== 6) { // Skip Fri/Sat
+            workingDaysCount++;
         }
+        tempDate.setDate(tempDate.getDate() + 1);
     }
 
     let kpiTotalHours = 0;
@@ -230,7 +250,7 @@ function generateReport() {
         kpiTotalHours += data.totalHours;
         kpiTotalLates += data.lates;
         
-        const absentDays = workingDaysPassedCount - data.daysPresent;
+        const absentDays = workingDaysCount - data.daysPresent;
         
         names.push(data.name);
         hours.push((data.totalHours).toFixed(2));
@@ -244,6 +264,7 @@ function generateReport() {
                 <td data-label="أيام الغياب"><span style="color:${absentDays > 0 ? 'var(--danger)' : 'inherit'}">${absentDays > 0 ? absentDays : 0} أيام</span></td>
                 <td data-label="التأخير"><span style="color:${data.lates > 0 ? 'var(--danger)' : 'inherit'}">${data.lates} مرات</span></td>
                 <td data-label="العمل الإضافي"><span style="color:#3b82f6">${data.overtime || 0} أيام</span></td>
+                <td data-label="بدل الانتقال">${data.totalTransport.toFixed(2)} ج.م</td>
                 <td data-label="إجمالي الساعات">${data.totalHours.toFixed(2)} ساعات</td>
             </tr>
         `;
@@ -254,6 +275,31 @@ function generateReport() {
     document.getElementById('kpiActiveEmp').innerText = kpiActiveEmp;
 
     updateCharts(names, hours, lates);
+}
+
+async function sendCustomReport() {
+    const startStr = document.getElementById('reportStartDate').value;
+    const endStr = document.getElementById('reportEndDate').value;
+    
+    if(!startStr || !endStr) return alert("يرجى اختيار الفترة الزمنية أولاً");
+
+    if(!confirm("هل تريد إرسال هذا التقرير للإيميلات المسجلة في الإعدادات؟")) return;
+
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ 
+                action: 'sendManualReport', 
+                startDate: startStr, 
+                endDate: endStr 
+            }),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const result = await res.json();
+        alert(result.success ? "✅ تم إرسال التقرير بنجاح" : "❌ فشل الإرسال: " + result.message);
+    } catch(e) { alert("خطأ في الاتصال"); }
+    document.getElementById('loader').classList.add('hidden');
 }
 
 function updateCharts(labels, hoursData, latesData) {

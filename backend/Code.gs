@@ -226,11 +226,17 @@ function doPost(e) {
   try {
     var data = JSON.parse(e.postData.contents);
     var ss = getSpreadsheet();
+    var action = data.action;
 
+    // SEND MANUAL REPORT
+    if (action === "sendManualReport") {
+      return sendManualReport(ss, data);
+    }
+    
     // LOGIN
-    if (data.action === "login") {
+    if (action === "login") {
       var s = getOrCreateSheet("employees",
-        ["id","name","email","password","phone","role","assignedSites","faceDescriptor"]
+        ["id","name","email","password","phone","role","assignedSites","faceDescriptor","transportPrice"]
       );
 
       var rows = s.getDataRange().getValues();
@@ -247,9 +253,9 @@ function doPost(e) {
         message: "تم تسجيل الدخول بنجاح"
       });
     }
-    
+
     // SEND OTP
-    if (data.action === "sendOTP") {
+    if (action === "sendOTP") {
        var sheet = getOrCreateSheet("employees", ["id","name","email","password","phone","role","assignedSites","faceDescriptor"]);
        var rows = sheet.getDataRange().getValues();
        rows.shift();
@@ -588,6 +594,33 @@ function sendDailyReport() {
     attachments: [Utilities.newBlob(csvContent, 'text/csv', 'daily_report_' + today.toISOString().split('T')[0] + '.csv')],
     name: "نظام الموارد البشرية"
   });
+}
+
+function sendManualReport(ss, data) {
+  var settings = getSettingsObject();
+  var emails = settings.reportEmails;
+  if (!emails) throw new Error("يرجى إعداد إيميلات الاستلام في الإعدادات أولاً");
+
+  var start = new Date(data.startDate);
+  start.setHours(0,0,0,0);
+  var end = new Date(data.endDate);
+  end.setHours(23,59,59,999);
+
+  var records = getAttendanceInRange(start, end);
+  if (records.length === 0) return json({success:false, message: "لا توجد سجلات في هذه الفترة"});
+
+  var title = "تقرير حضور مخصص: " + start.toLocaleDateString('ar-EG') + " إلى " + end.toLocaleDateString('ar-EG');
+  var csvContent = generateCSV(records);
+  var htmlTable = generateHTMLTable(records, title);
+
+  GmailApp.sendEmail(emails, title, 
+    "مرفق التقرير المخصص بصيغة CSV.", {
+    htmlBody: htmlTable,
+    attachments: [Utilities.newBlob(csvContent, 'text/csv', 'custom_report.csv')],
+    name: "نظام الموارد البشرية"
+  });
+
+  return json({success:true});
 }
 
 function sendMonthlyReport() {

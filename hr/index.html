@@ -78,7 +78,11 @@
             <div id="tab-attendance" class="tab-content">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
                     <h2>سجلات العمليات الشاملة</h2>
-                    <button class="btn-primary" style="width:auto;" onclick="fetchAttendance()">تحديث</button>
+                    <div style="display:flex; gap:10px; align-items:center;">
+                        <label>تاريخ اليوم:</label>
+                        <input type="date" id="attendanceDateFilter" onchange="renderAttendanceTable(allAttendanceData)">
+                        <button class="btn-primary" style="width:auto;" onclick="fetchAttendance()">تحديث 🔄</button>
+                    </div>
                 </div>
                 <div class="table-container">
                     <table>
@@ -89,6 +93,7 @@
                                 <th>وقت الحضور</th>
                                 <th>وقت الانصراف</th>
                                 <th>إجمالي الساعات</th>
+                                <th>بدل الانتقال</th>
                                 <th>الحالة</th>
                             </tr>
                         </thead>
@@ -98,12 +103,15 @@
             </div>
 
              <!-- Reports Tab -->
-             <div id="tab-reports" class="tab-content hidden">
-                <h2>التقرير الشهري للساعات والدوام</h2>
-                 <div class="filter-bar">
-                    <label>اختر الشهر:</label>
-                    <input type="month" id="reportMonth" onchange="generateReport()">
+              <div id="tab-reports" class="tab-content hidden">
+                <h2>تقرير الساعات والبدلات المخصص</h2>
+                  <div class="filter-bar">
+                    <label>من:</label>
+                    <input type="date" id="reportStartDate">
+                    <label>إلى:</label>
+                    <input type="date" id="reportEndDate">
                     <button class="btn-primary" style="width:auto; padding:8px 15px;" onclick="generateReport()">توليد التقرير</button>
+                    <button class="btn-primary" style="width:auto; padding:8px 15px; background:#10b981;" onclick="sendCustomReport()">إرسال للإيميل 📧</button>
                     <button class="btn-primary" style="width:auto; padding:8px 15px; background:var(--secondary);" onclick="window.print()">طباعة</button>
                 </div>
                 
@@ -137,9 +145,10 @@
                                 <th>ID الموظف</th>
                                 <th>اسم الموظف</th>
                                 <th>أيام الحضور</th>
-                                <th>أيام الغياب</th>
+                                 <th>أيام الغياب</th>
                                 <th>التأخير</th>
                                 <th>العمل الإضافي</th>
+                                <th>بدل الانتقال</th>
                                 <th>إجمالي الساعات</th>
                             </tr>
                         </thead>
