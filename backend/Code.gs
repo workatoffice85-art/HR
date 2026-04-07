@@ -367,8 +367,10 @@ function doPost(e) {
       var rows = s.getDataRange().getValues();
       for (var i = 1; i < rows.length; i++) {
         if (String(rows[i][0]) === String(data.id)) {
+          var incomingPassword = data.password === undefined || data.password === null ? "" : String(data.password).trim();
+          var finalPassword = incomingPassword || String(rows[i][3] || "");
           // Update (name to transportPrice)
-          s.getRange(i + 1, 2, 1, 6).setValues([[data.name, data.email, data.password, data.phone, data.role, data.assignedSites]]);
+          s.getRange(i + 1, 2, 1, 6).setValues([[data.name, data.email, finalPassword, data.phone, data.role, data.assignedSites]]);
           s.getRange(i+1, 9).setValue(data.transportPrice);
           return json({success:true, message: "تم تحديث بيانات الموظف بنجاح"});
         }
