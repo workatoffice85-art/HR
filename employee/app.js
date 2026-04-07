@@ -8,6 +8,7 @@ let faceMatcher = null;
 let currentFaceDescriptor = null;
 let timerInterval = null; // Added for live counter // Stored during video match
 let tempEmail = ""; // used during registration
+let tempPhone = ""; // used during registration
 const MODEL_URL = '../models';
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -33,7 +34,7 @@ function checkSession() {
 
 // 1. Normal Login
 async function login() {
-    const email = document.getElementById('loginEmail').value.trim();
+    const email = document.getElementById('loginIdentifier').value.trim();
     const pass = document.getElementById('loginPass').value.trim();
     if (!email || !pass) return alert("أدخل بيانات الدخول");
 
@@ -42,7 +43,7 @@ async function login() {
     try {
         const response = await fetch(API_URL, {
             method: 'POST',
-            body: JSON.stringify({ action: 'login', email: email, password: pass }),
+            body: JSON.stringify({ action: 'login', identifier: email, password: pass }),
             headers: { 'Content-Type': 'text/plain' }
         });
         const result = await response.json();
@@ -63,12 +64,14 @@ async function login() {
 // 2. Request OTP (Registration)
 async function requestOTP() {
     tempEmail = document.getElementById('regEmail').value.trim();
+    tempPhone = document.getElementById('regPhone').value.trim();
+    if(!tempPhone) return alert("أدخل رقم الهاتف");
     if(!tempEmail) return alert("أدخل الإيميل");
 
     document.getElementById('btnRequestOTP').innerText = 'جاري الإرسال...';
     try {
        const res = await fetch(API_URL, {
-            method:'POST', body: JSON.stringify({action:'sendOTP', email: tempEmail}), headers:{'Content-Type':'text/plain'}
+            method:'POST', body: JSON.stringify({action:'sendOTP', email: tempEmail, phone: tempPhone}), headers:{'Content-Type':'text/plain'}
        });
        const result = await res.json();
        if(result.success) {
@@ -151,7 +154,7 @@ async function completeRegistration() {
     
     const payload = {
         action: 'saveEmployee',
-        id: newId, name: name, email: tempEmail, password: pass, phone: '', role: 'employee', assignedSites: '',
+        id: newId, name: name, email: tempEmail, password: pass, phone: tempPhone, role: 'employee', assignedSites: '',
         faceDescriptor: JSON.stringify(registeredFaceDescriptor)
     };
 

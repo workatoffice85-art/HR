@@ -120,6 +120,87 @@ function toNumberSafe(value, fallback) {
   return isNaN(parsed) ? defaultNumber : parsed;
 }
 
+function normalizeEmailValue(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function normalizePhoneValue(value) {
+  var phone = String(value || "").trim();
+  if (!phone) return "";
+
+  // Arabic-Indic digits
+  phone = phone.replace(/[\u0660-\u0669]/g, function(ch) { return String(ch.charCodeAt(0) - 0x0660); });
+  // Eastern Arabic-Indic (Persian) digits
+  phone = phone.replace(/[\u06F0-\u06F9]/g, function(ch) { return String(ch.charCodeAt(0) - 0x06F0); });
+
+  phone = phone.replace(/[\u200f\u200e\s-]/g, "");
+  phone = phone.replace(/[()]/g, "");
+
+  if (phone.indexOf("00") === 0) {
+    phone = "+" + phone.substring(2);
+  }
+
+  // keep only leading plus and digits
+  if (phone.indexOf("+") === 0) {
+    phone = "+" + phone.substring(1).replace(/[^\d]/g, "");
+  } else {
+    phone = phone.replace(/[^\d]/g, "");
+  }
+
+  // Egypt-friendly normalization:
+  // 01xxxxxxxxx -> +201xxxxxxxxx
+  if (/^01\d{9}$/.test(phone)) {
+    phone = "+2" + phone;
+  } else if (/^20\d{10}$/.test(phone)) {
+    phone = "+" + phone;
+  }
+
+  return phone;
+}
+
+function resolveUserByIdentifier(rows, identifier, password) {
+  var normalizedIdentifier = String(identifier || "").trim();
+  if (!normalizedIdentifier) return null;
+
+  var normalizedEmail = normalizeEmailValue(normalizedIdentifier);
+  var normalizedPhone = normalizePhoneValue(normalizedIdentifier);
+  var passwordText = String(password);
+
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
+    if (String(row[3]) !== passwordText) continue;
+
+    if (normalizeEmailValue(row[2]) === normalizedEmail) return row;
+    if (normalizedPhone && normalizePhoneValue(row[4]) === normalizedPhone) return row;
+  }
+
+  return null;
+}
+
+function ensureEmployeeContactsUnique(rows, email, phone, ignoreEmployeeId) {
+  var normalizedEmail = normalizeEmailValue(email);
+  var normalizedPhone = normalizePhoneValue(phone);
+  var ignoredId = String(ignoreEmployeeId || "");
+
+  if (!normalizedEmail) throw new Error("Email is required");
+  if (!normalizedPhone) throw new Error("Phone is required");
+
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
+    var rowId = String(row[0] || "");
+    if (ignoredId && rowId === ignoredId) continue;
+
+    if (normalizeEmailValue(row[2]) === normalizedEmail) {
+      throw new Error("Email already registered");
+    }
+    if (normalizePhoneValue(row[4]) === normalizedPhone) {
+      throw new Error("Phone already registered");
+    }
+  }
+
+  return { email: normalizedEmail, phone: normalizedPhone };
+}
+
 function getSiteTransportMap() {
   var sheet = getOrCreateSheet("sites", ["id","name","latitude","longitude","radius","transportPrice"]);
   var rows = sheet.getDataRange().getValues();
@@ -461,7 +542,8 @@ function doPost(e) {
       var rows = s.getDataRange().getValues();
       rows.shift();
 
-      var user = rows.find(function(r) { return r[2] === data.email && String(r[3]) === String(data.password); });
+      var identifier = data.identifier || data.email || data.phone || "";
+      var user = resolveUserByIdentifier(rows, identifier, data.password);
 
       if (!user) throw new Error("بيانات الدخول غير صحيحة أو لا تملك الصلاحية");
       if (data.role && user[5] !== data.role) throw new Error("بيانات الدخول غير صحيحة أو لا تملك الصلاحية");
@@ -475,15 +557,25 @@ function doPost(e) {
 
     // SEND OTP
     if (action === "sendOTP") {
-       var sheet = getOrCreateSheet("employees", ["id","name","email","password","phone","role","assignedSites","faceDescriptor"]);
+       var sheet = getOrCreateSheet("employees", ["id","name","email","password","phone","role","assignedSites","faceDescriptor","transportPrice"]);
        var rows = sheet.getDataRange().getValues();
        rows.shift();
-       var exists = rows.find(function(r) { return r[2] == data.email; });
+       var normalizedEmail = normalizeEmailValue(data.email);
+       var normalizedPhone = normalizePhoneValue(data.phone);
+       if (!normalizedEmail) throw new Error("Email is required");
+       if (!normalizedPhone) throw new Error("Phone is required");
+       data.email = normalizedEmail;
+       data.phone = normalizedPhone;
+       var exists = rows.find(function(r) { return normalizeEmailValue(r[2]) === normalizedEmail; });
        if(exists) {
            throw new Error("هذا البريد الإلكتروني مسجل مسبقاً، يمكنك تسجيل الدخول مباشرة.");
        }
+       var phoneExists = rows.find(function(r) { return normalizePhoneValue(r[4]) === normalizedPhone; });
+       if (phoneExists) {
+           throw new Error("Phone already registered");
+       }
        var code = Math.floor(1000 + Math.random() * 9000).toString();
-       CacheService.getScriptCache().put(data.email, code, 600); // 10 minutes cache
+       CacheService.getScriptCache().put("otp:" + normalizedEmail, code, 600); // 10 minutes cache
        
        // Use GmailApp instead of MailApp for better Outlook deliverability
        // Also adding a sender name
@@ -496,9 +588,11 @@ function doPost(e) {
     
     // VERIFY OTP
     if (data.action === "verifyOTP") {
-       var cachedCode = CacheService.getScriptCache().get(data.email);
-       if (cachedCode === data.code) {
-           CacheService.getScriptCache().remove(data.email);
+       var verifyEmail = normalizeEmailValue(data.email);
+       var otpCacheKey = "otp:" + verifyEmail;
+       var cachedCode = CacheService.getScriptCache().get(otpCacheKey);
+       if (cachedCode === String(data.code)) {
+           CacheService.getScriptCache().remove(otpCacheKey);
            return json({ success: true, message: "رمز صحيح" });
        } else {
            throw new Error("رمز التحقق غير صحيح أو منتهي الصلاحية");
@@ -548,10 +642,13 @@ function doPost(e) {
       var s = getOrCreateSheet("employees",
         ["id","name","email","password","phone","role","assignedSites","faceDescriptor","transportPrice"]
       );
+      var existingRows = s.getDataRange().getValues();
+      existingRows.shift();
+      var normalizedContacts = ensureEmployeeContactsUnique(existingRows, data.email, data.phone);
 
       s.appendRow([
-        data.id,data.name,data.email,data.password,
-        data.phone,data.role,data.assignedSites,data.faceDescriptor,toNumberSafe(data.transportPrice, 0)
+        data.id,data.name,normalizedContacts.email,data.password,
+        normalizedContacts.phone,data.role,data.assignedSites,data.faceDescriptor,toNumberSafe(data.transportPrice, 0)
       ]);
 
       return json({success:true, message: "تم حفظ بيانات الموظف بنجاح"});
@@ -561,12 +658,13 @@ function doPost(e) {
     if (data.action === "updateEmployee") {
       var s = getOrCreateSheet("employees", ["id","name","email","password","phone","role","assignedSites","faceDescriptor","transportPrice"]);
       var rows = s.getDataRange().getValues();
+      var normalizedContacts = ensureEmployeeContactsUnique(rows.slice(1), data.email, data.phone, data.id);
       for (var i = 1; i < rows.length; i++) {
         if (String(rows[i][0]) === String(data.id)) {
           var incomingPassword = data.password === undefined || data.password === null ? "" : String(data.password).trim();
           var finalPassword = incomingPassword || String(rows[i][3] || "");
           // Update (name to transportPrice)
-          s.getRange(i + 1, 2, 1, 6).setValues([[data.name, data.email, finalPassword, data.phone, data.role, data.assignedSites]]);
+          s.getRange(i + 1, 2, 1, 6).setValues([[data.name, normalizedContacts.email, finalPassword, normalizedContacts.phone, data.role, data.assignedSites]]);
           var normalizedEmployeeTransport = toNumberSafe(data.transportPrice, 0);
           s.getRange(i+1, 9).setValue(normalizedEmployeeTransport);
           syncAttendanceTransportForEmployee(data.id, normalizedEmployeeTransport);
