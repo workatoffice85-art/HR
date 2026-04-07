@@ -189,6 +189,30 @@ function getWorkingDaysCount(startDate, endDate) {
     return workingDaysCount;
 }
 
+function toTransportNumber(value) {
+    const parsed = parseFloat(value || 0);
+    return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function calculateUniqueDailyTransport(records) {
+    const dailyTransport = {};
+    records.forEach(record => {
+        const dateObj = new Date(record.checkIn);
+        if (Number.isNaN(dateObj.getTime())) return;
+
+        const dayKey = `${String(record.employeeId || '')}|${dateObj.toDateString()}`;
+        const transportValue = toTransportNumber(record.transportPrice);
+
+        if (!(dayKey in dailyTransport)) {
+            dailyTransport[dayKey] = transportValue;
+        } else if (transportValue > dailyTransport[dayKey]) {
+            dailyTransport[dayKey] = transportValue;
+        }
+    });
+
+    return Object.values(dailyTransport).reduce((sum, value) => sum + value, 0);
+}
+
 function getStatusMeta(status) {
     if (status === 'late') return { text: 'متأخر', color: 'var(--danger)' };
     if (status === 'overtime') return { text: 'عمل إضافي', color: '#3b82f6' };
@@ -281,18 +305,17 @@ async function generateEmployeeDetailedReport() {
 
     sortedRecords.forEach(record => {
         const recordDate = new Date(record.checkIn);
-        if (!isNaN(recordDate)) {
-            const dateKey = recordDate.toDateString();
+        const dateKey = !isNaN(recordDate) ? recordDate.toDateString() : null;
+        if (dateKey) {
             presentDates.add(dateKey);
             if (record.status === 'late') lateDates.add(dateKey);
         }
 
         const parsedHours = parseFloat(record.totalHours || 0);
         if (!isNaN(parsedHours)) totalHours += parsedHours;
-
-        const parsedTransport = parseFloat(record.transportPrice || 0);
-        if (!isNaN(parsedTransport)) totalTransport += parsedTransport;
     });
+
+    totalTransport = calculateUniqueDailyTransport(sortedRecords);
 
     const workingDaysCount = getWorkingDaysCount(startDate, endDate);
     const daysPresent = presentDates.size;
@@ -431,6 +454,7 @@ function generateReport() {
                  name: record.employeeName,
                  uniqueDates: new Set(),
                  lateDates: new Set(),
+                 transportByDate: {},
                  daysPresent: 0,
                  lates: 0,
                  overtime: 0,
@@ -454,7 +478,17 @@ function generateReport() {
         }
         if(record.status === 'overtime') empStats.overtime += 1;
         if(record.totalHours) empStats.totalHours += parseFloat(record.totalHours);
-        if(record.transportPrice) empStats.totalTransport += parseFloat(record.transportPrice);
+        const transportValue = toTransportNumber(record.transportPrice);
+        if (!(recordDate in empStats.transportByDate)) {
+            empStats.transportByDate[recordDate] = transportValue;
+        } else if (transportValue > empStats.transportByDate[recordDate]) {
+            empStats.transportByDate[recordDate] = transportValue;
+        }
+    });
+
+    Object.keys(reportAcc).forEach(empId => {
+        const map = reportAcc[empId].transportByDate;
+        reportAcc[empId].totalTransport = Object.values(map).reduce((sum, value) => sum + value, 0);
     });
 
     // Calculate working days passed in the selected range

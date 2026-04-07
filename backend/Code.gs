@@ -86,6 +86,163 @@ function normalizeTimeToHHmm(value, fallback) {
   return defaultTime;
 }
 
+function toNumberSafe(value, fallback) {
+  var defaultNumber = (typeof fallback === "undefined") ? 0 : fallback;
+  if (value === null || value === undefined || value === "") return defaultNumber;
+  if (typeof value === "number") return isNaN(value) ? defaultNumber : value;
+  if (Object.prototype.toString.call(value) === "[object Date]") return defaultNumber;
+
+  var text = String(value).trim();
+  if (!text) return defaultNumber;
+
+  // Arabic-Indic digits
+  text = text.replace(/[\u0660-\u0669]/g, function(ch) { return String(ch.charCodeAt(0) - 0x0660); });
+  // Eastern Arabic-Indic (Persian) digits
+  text = text.replace(/[\u06F0-\u06F9]/g, function(ch) { return String(ch.charCodeAt(0) - 0x06F0); });
+
+  // Normalize common separators and remove currency text/symbols
+  text = text.replace(/[\u200f\u200e\s]/g, "");
+  text = text.replace(/\u066C/g, "");
+  text = text.replace(/,/g, "");
+  text = text.replace(/\u060C/g, "");
+  text = text.replace(/\u066B/g, ".");
+  text = text.replace(/[^\d.\-]/g, "");
+
+  if (!text) return defaultNumber;
+
+  // Keep only first decimal point if more than one exists
+  var firstDot = text.indexOf(".");
+  if (firstDot !== -1) {
+    text = text.substring(0, firstDot + 1) + text.substring(firstDot + 1).replace(/\./g, "");
+  }
+
+  var parsed = parseFloat(text);
+  return isNaN(parsed) ? defaultNumber : parsed;
+}
+
+function getSiteTransportMap() {
+  var sheet = getOrCreateSheet("sites", ["id","name","latitude","longitude","radius","transportPrice"]);
+  var rows = sheet.getDataRange().getValues();
+  var map = {};
+  for (var i = 1; i < rows.length; i++) {
+    map[String(rows[i][0])] = toNumberSafe(rows[i][5], 0);
+  }
+  return map;
+}
+
+function getEmployeeTransportMap() {
+  var sheet = getOrCreateSheet("employees",
+    ["id","name","email","password","phone","role","assignedSites","faceDescriptor","transportPrice"]
+  );
+  var rows = sheet.getDataRange().getValues();
+  var map = {};
+  for (var i = 1; i < rows.length; i++) {
+    map[String(rows[i][0])] = toNumberSafe(rows[i][8], 0);
+  }
+  return map;
+}
+
+function getRequestTransportMap() {
+  var sheet = getOrCreateSheet("siteRequests",
+    ["id", "employeeId", "employeeName", "latitude", "longitude", "suggestedName", "mapLink", "status", "timestamp", "transportPrice"]
+  );
+  var rows = sheet.getDataRange().getValues();
+  var map = {};
+  for (var i = 1; i < rows.length; i++) {
+    map[String(rows[i][0])] = toNumberSafe(rows[i][9], 0);
+  }
+  return map;
+}
+
+function buildTransportContext() {
+  return {
+    siteMap: getSiteTransportMap(),
+    employeeMap: getEmployeeTransportMap(),
+    requestMap: getRequestTransportMap()
+  };
+}
+
+function isRequestSiteId(siteId) {
+  return /^REQ/i.test(String(siteId || ""));
+}
+
+function resolveTransportPrice(rawTransport, employeeId, siteId, context) {
+  var attendanceTransport = toNumberSafe(rawTransport, null);
+  var normalizedSiteId = String(siteId || "");
+  var normalizedEmployeeId = String(employeeId || "");
+
+  if (isRequestSiteId(normalizedSiteId)) {
+    var requestTransport = context && context.requestMap
+      ? toNumberSafe(context.requestMap[normalizedSiteId], null)
+      : null;
+    if (requestTransport !== null) return requestTransport;
+  }
+
+  var employeeTransport = context && context.employeeMap
+    ? toNumberSafe(context.employeeMap[normalizedEmployeeId], null)
+    : null;
+  if (employeeTransport !== null) return employeeTransport;
+
+  if (attendanceTransport !== null) return attendanceTransport;
+
+  var siteTransport = context && context.siteMap
+    ? toNumberSafe(context.siteMap[normalizedSiteId], null)
+    : null;
+  if (siteTransport !== null) return siteTransport;
+
+  return 0;
+}
+
+function syncAttendanceTransportForEmployee(employeeId, employeeTransport) {
+  var attendanceSheet = getOrCreateSheet("attendance",
+    ["employeeId","employeeName","siteId","siteName","checkIn","checkOut","latitude","longitude","status","totalHours","transportPrice"]
+  );
+  var rows = attendanceSheet.getDataRange().getValues();
+  if (rows.length <= 1) return;
+
+  var normalizedEmployeeId = String(employeeId || "");
+  var normalizedTransport = toNumberSafe(employeeTransport, 0);
+  var changed = false;
+
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === normalizedEmployeeId && !isRequestSiteId(rows[i][2])) {
+      rows[i][10] = normalizedTransport;
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    attendanceSheet.getRange(2, 11, rows.length - 1, 1).setValues(
+      rows.slice(1).map(function(r) { return [r[10]]; })
+    );
+  }
+}
+
+function syncAttendanceTransportForRequest(requestId, requestTransport) {
+  var attendanceSheet = getOrCreateSheet("attendance",
+    ["employeeId","employeeName","siteId","siteName","checkIn","checkOut","latitude","longitude","status","totalHours","transportPrice"]
+  );
+  var rows = attendanceSheet.getDataRange().getValues();
+  if (rows.length <= 1) return;
+
+  var normalizedRequestId = String(requestId || "");
+  var normalizedTransport = toNumberSafe(requestTransport, 0);
+  var changed = false;
+
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][2]) === normalizedRequestId) {
+      rows[i][10] = normalizedTransport;
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    attendanceSheet.getRange(2, 11, rows.length - 1, 1).setValues(
+      rows.slice(1).map(function(r) { return [r[10]]; })
+    );
+  }
+}
+
 /////////////////////////////
 // 🔥 VALIDATION
 /////////////////////////////
@@ -131,7 +288,7 @@ function validateAll(ss, data) {
       parseFloat(sites[i][3])
     );
     if (dist <= parseFloat(sites[i][4])) {
-      return { id: sites[i][0], name: sites[i][1], transportPrice: sites[i][5] || 0 };
+      return { id: sites[i][0], name: sites[i][1], transportPrice: toNumberSafe(sites[i][5], 0) };
     }
   }
 
@@ -151,7 +308,7 @@ function validateAll(ss, data) {
           parseFloat(reqRows[j][4])
         );
         if (dist <= 100) { // Default 100m for temp requests
-          return { id: reqRows[j][0], name: reqRows[j][5], transportPrice: reqRows[j][9] || 0 };
+          return { id: reqRows[j][0], name: reqRows[j][5], transportPrice: toNumberSafe(reqRows[j][9], 0) };
         }
       }
     }
@@ -179,7 +336,7 @@ function doGet(e) {
       return json({
         success:true,
         data:d.map(function(r) { return {
-          id:r[0], name:r[1], email:r[2], phone:r[4], role:r[5], assignedSites:r[6]?r[6].toString().split(','):[], faceDescriptor:r[7], transportPrice:r[8]||0
+          id:r[0], name:r[1], email:r[2], phone:r[4], role:r[5], assignedSites:r[6]?r[6].toString().split(','):[], faceDescriptor:r[7], transportPrice:toNumberSafe(r[8], 0)
         };})
       });
     }
@@ -195,7 +352,7 @@ function doGet(e) {
       return json({
         success:true,
         data:d.map(function(r) { return {
-          id:String(r[0]), name:r[1], latitude:parseFloat(r[2]), longitude:parseFloat(r[3]), radius:parseFloat(r[4]), transportPrice:r[5]||0
+          id:String(r[0]), name:r[1], latitude:parseFloat(r[2]), longitude:parseFloat(r[3]), radius:parseFloat(r[4]), transportPrice:toNumberSafe(r[5], 0)
         };})
       });
     }
@@ -208,11 +365,15 @@ function doGet(e) {
 
       var d = s.getDataRange().getValues();
       d.shift();
+      var transportContext = buildTransportContext();
 
-      var records = d.map(function(r) { return {
+      var records = d.map(function(r) {
+        var transport = resolveTransportPrice(r[10], r[0], r[2], transportContext);
+        return {
           employeeId:r[0], employeeName:r[1], siteId:r[2], siteName:r[3],
-          checkIn:r[4], checkOut:r[5], latitude:r[6], longitude:r[7], status:r[8], totalHours:r[9], transportPrice:r[10]||0
-      };});
+          checkIn:r[4], checkOut:r[5], latitude:r[6], longitude:r[7], status:r[8], totalHours:r[9], transportPrice:transport
+        };
+      });
       
       if(e.parameter.employeeId) {
           records = records.filter(function(r) { return String(r.employeeId) === String(e.parameter.employeeId); });
@@ -242,7 +403,7 @@ function doGet(e) {
       return json({
         success: true,
         data: d.map(function(r) { return {
-          id: r[0], employeeId: r[1], employeeName: r[2], latitude: r[3], longitude: r[4], suggestedName: r[5], mapLink: r[6], status: r[7], timestamp: r[8], transportPrice: r[9]||0
+          id: r[0], employeeId: r[1], employeeName: r[2], latitude: r[3], longitude: r[4], suggestedName: r[5], mapLink: r[6], status: r[7], timestamp: r[8], transportPrice: toNumberSafe(r[9], 0)
         };})
       });
     }
@@ -307,7 +468,7 @@ function doPost(e) {
 
       return json({
         success:true,
-        data:{ id:user[0], name:user[1], email:user[2], phone:user[4], role:user[5], assignedSites:user[6]?user[6].toString().split(','):[], faceDescriptor:user[7]||"", transportPrice:user[8]||0 },
+        data:{ id:user[0], name:user[1], email:user[2], phone:user[4], role:user[5], assignedSites:user[6]?user[6].toString().split(','):[], faceDescriptor:user[7]||"", transportPrice:toNumberSafe(user[8], 0) },
         message: "تم تسجيل الدخول بنجاح"
       });
     }
@@ -390,7 +551,7 @@ function doPost(e) {
 
       s.appendRow([
         data.id,data.name,data.email,data.password,
-        data.phone,data.role,data.assignedSites,data.faceDescriptor,data.transportPrice || 0
+        data.phone,data.role,data.assignedSites,data.faceDescriptor,toNumberSafe(data.transportPrice, 0)
       ]);
 
       return json({success:true, message: "تم حفظ بيانات الموظف بنجاح"});
@@ -406,7 +567,9 @@ function doPost(e) {
           var finalPassword = incomingPassword || String(rows[i][3] || "");
           // Update (name to transportPrice)
           s.getRange(i + 1, 2, 1, 6).setValues([[data.name, data.email, finalPassword, data.phone, data.role, data.assignedSites]]);
-          s.getRange(i+1, 9).setValue(data.transportPrice);
+          var normalizedEmployeeTransport = toNumberSafe(data.transportPrice, 0);
+          s.getRange(i+1, 9).setValue(normalizedEmployeeTransport);
+          syncAttendanceTransportForEmployee(data.id, normalizedEmployeeTransport);
           return json({success:true, message: "تم تحديث بيانات الموظف بنجاح"});
         }
       }
@@ -434,7 +597,7 @@ function doPost(e) {
 
       s.appendRow([
         data.id,data.name,
-        data.latitude,data.longitude,data.radius,data.transportPrice || 0
+        data.latitude,data.longitude,data.radius,toNumberSafe(data.transportPrice, 0)
       ]);
 
       return json({success:true, message: "تم إضافة الموقع بنجاح"});
@@ -501,6 +664,7 @@ function doPost(e) {
       var reqSheet = getOrCreateSheet("siteRequests", ["id", "employeeId", "employeeName", "latitude", "longitude", "suggestedName", "mapLink", "status", "timestamp", "transportPrice"]);
       var sitesSheet = getOrCreateSheet("sites", ["id", "name", "latitude", "longitude", "radius", "transportPrice"]);
       var rows = reqSheet.getDataRange().getValues();
+      var approvedRequestTransport = toNumberSafe(data.transportPrice, 120);
       
       for (var i = 1; i < rows.length; i++) {
         if (String(rows[i][0]) === String(data.id)) {
@@ -510,7 +674,7 @@ function doPost(e) {
             sitesSheet.appendRow([
               Math.floor(10000 + Math.random() * 90000),
               data.name || rows[i][5],
-              rows[i][3], rows[i][4], data.radius || 100, data.transportPrice || 120
+              rows[i][3], rows[i][4], data.radius || 100, approvedRequestTransport
             ]);
             reqSheet.getRange(i + 1, 8).setValue("approved");
           } else {
@@ -518,7 +682,8 @@ function doPost(e) {
             reqSheet.getRange(i + 1, 8).setValue("approved_today");
           }
           
-          reqSheet.getRange(i + 1, 10).setValue(data.transportPrice || 120);
+          reqSheet.getRange(i + 1, 10).setValue(approvedRequestTransport);
+          syncAttendanceTransportForRequest(rows[i][0], approvedRequestTransport);
           return json({ success: true, message: "تمت الموافقة على الموقع بنجاح." });
         }
       }
@@ -581,6 +746,8 @@ function doPost(e) {
         lateLimit.setHours(parseInt(parts[0]), parseInt(parts[1] || 0), 0, 0);
         manualStatus = (checkInDate > lateLimit) ? "late" : "present";
       }
+      var transportContext = buildTransportContext();
+      var attendanceTransport = resolveTransportPrice(site.transportPrice, data.employeeId, site.id, transportContext);
 
       sheet.appendRow([
         data.employeeId,data.employeeName,
@@ -588,10 +755,11 @@ function doPost(e) {
         data.checkIn,"",
         data.latitude,data.longitude,
         manualStatus,"",
-        site.transportPrice || 0
+        attendanceTransport
       ]);
 
-      return json({success:true, message: "تم تسجيل الحضور بنجاح في: " + site.name + (site.transportPrice ? " (بدل انتقال: " + site.transportPrice + ")" : "")});
+      var siteTransportLabel = attendanceTransport;
+      return json({success:true, message: "تم تسجيل الحضور بنجاح في: " + site.name + (siteTransportLabel ? " (بدل انتقال: " + siteTransportLabel + ")" : "")});
     }
 
 // CHECK-OUT
@@ -735,11 +903,44 @@ function getWorkingDaysCountInRange(startDate, endDate) {
   return count;
 }
 
+function getRecordDateKey(value) {
+  var d = new Date(value);
+  if (isNaN(d)) return null;
+  return d.toDateString();
+}
+
+function calculateUniqueDailyTransportTotal(records) {
+  var dailyTransportByEmployee = {};
+
+  records.forEach(function(r) {
+    var dateKey = getRecordDateKey(r.checkIn);
+    if (!dateKey) return;
+
+    var employeeId = String(r.employeeId || "");
+    var transport = toNumberSafe(r.transport, 0);
+    var bucketKey = employeeId + "|" + dateKey;
+
+    if (typeof dailyTransportByEmployee[bucketKey] === "undefined") {
+      dailyTransportByEmployee[bucketKey] = transport;
+    } else {
+      dailyTransportByEmployee[bucketKey] = Math.max(dailyTransportByEmployee[bucketKey], transport);
+    }
+  });
+
+  var total = 0;
+  for (var key in dailyTransportByEmployee) {
+    if (Object.prototype.hasOwnProperty.call(dailyTransportByEmployee, key)) {
+      total += toNumberSafe(dailyTransportByEmployee[key], 0);
+    }
+  }
+  return total;
+}
+
 function calculateEmployeeDetailedStats(records, startDate, endDate) {
   var presentDates = {};
   var lateDates = {};
   var totalHours = 0;
-  var totalTransport = 0;
+  var totalTransport = calculateUniqueDailyTransportTotal(records);
 
   records.forEach(function(r) {
     var checkInDate = new Date(r.checkIn);
@@ -752,8 +953,6 @@ function calculateEmployeeDetailedStats(records, startDate, endDate) {
     var parsedHours = parseFloat(r.hours || 0);
     if (!isNaN(parsedHours)) totalHours += parsedHours;
 
-    var parsedTransport = parseFloat(r.transport || 0);
-    if (!isNaN(parsedTransport)) totalTransport += parsedTransport;
   });
 
   var daysPresent = Object.keys(presentDates).length;
@@ -921,13 +1120,15 @@ function getAttendanceInRange(start, end) {
   var s = getOrCreateSheet("attendance", ["employeeId","employeeName","siteId","siteName","checkIn","checkOut","latitude","longitude","status","totalHours","transportPrice"]);
   var data = s.getDataRange().getValues();
   data.shift();
+  var transportContext = buildTransportContext();
   
   return data.filter(function(r) {
     var d = new Date(r[4]);
     return d >= start && d <= end;
   }).map(function(r) {
+    var transport = resolveTransportPrice(r[10], r[0], r[2], transportContext);
     return {
-      employeeId: r[0], employeeName: r[1], siteName: r[3], checkIn: r[4], checkOut: r[5], status: r[8], hours: r[9], transport: r[10]
+      employeeId: r[0], employeeName: r[1], siteName: r[3], checkIn: r[4], checkOut: r[5], status: r[8], hours: r[9], transport: transport
     };
   });
 }
@@ -946,9 +1147,8 @@ function generateStyledExcel(records, reportTitle) {
     sheet.appendRow(headers);
     sheet.getRange("A2:G2").setBackground("#f1f5f9").setFontWeight("bold").setHorizontalAlignment("center").setBorder(true, true, true, true, true, true);
     
-    var totalTransport = 0;
+    var totalTransport = calculateUniqueDailyTransportTotal(records);
     records.forEach(function(r) {
-      totalTransport += parseFloat(r.transport || 0);
       sheet.appendRow([
         r.employeeName,
         r.siteName,
@@ -1012,13 +1212,12 @@ function generateStyledExcel(records, reportTitle) {
 }
 
 function generateHTMLTable(records, title) {
-  var totalTransport = 0;
+  var totalTransport = calculateUniqueDailyTransportTotal(records);
   var totalHours = 0;
   var uniqueEmployees = new Set();
   var totalLates = 0;
 
   var rows = records.map(function(r) {
-    totalTransport += parseFloat(r.transport || 0);
     totalHours += parseFloat(r.hours || 0);
     uniqueEmployees.add(r.employeeId);
     if(r.status === 'late') totalLates++;

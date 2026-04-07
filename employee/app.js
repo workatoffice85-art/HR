@@ -562,6 +562,11 @@ function getWorkingDaysPassed(year, month) {
     return days;
 }
 
+function toTransportNumber(value) {
+    const parsed = parseFloat(value || 0);
+    return Number.isNaN(parsed) ? 0 : parsed;
+}
+
 function renderMyReports(data, monthStr) {
     const targetYear = parseInt(monthStr.split('-')[0]);
     const targetMonth = parseInt(monthStr.split('-')[1]) - 1;
@@ -589,6 +594,7 @@ function renderMyReports(data, monthStr) {
 
     let totalHours = 0;
     let totalTransport = 0;
+    const dailyTransport = {};
     
     const tbody = document.getElementById('myReportsTableBody');
     tbody.innerHTML = '';
@@ -602,8 +608,18 @@ function renderMyReports(data, monthStr) {
 
     // Add Present Records
     presentRecords.forEach(record => {
+        const recordDateObj = new Date(record.checkIn);
+        const dateKey = !Number.isNaN(recordDateObj.getTime()) ? recordDateObj.toDateString() : null;
+
         if(record.totalHours) totalHours += parseFloat(record.totalHours);
-        if(record.transportPrice) totalTransport += parseFloat(record.transportPrice);
+        if (dateKey) {
+            const transportValue = toTransportNumber(record.transportPrice);
+            if (!(dateKey in dailyTransport)) {
+                dailyTransport[dateKey] = transportValue;
+            } else if (transportValue > dailyTransport[dateKey]) {
+                dailyTransport[dateKey] = transportValue;
+            }
+        }
         fullReport.push({
             date: new Date(record.checkIn),
             checkIn: record.checkIn,
@@ -613,6 +629,8 @@ function renderMyReports(data, monthStr) {
             type: 'entry'
         });
     });
+
+    totalTransport = Object.values(dailyTransport).reduce((sum, value) => sum + value, 0);
 
     // Add Absent Days (Only for working days that have no record)
     workingDaysPassed.forEach(dateStr => {
