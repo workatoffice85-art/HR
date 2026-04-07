@@ -51,6 +51,41 @@ function getFaceDistance(a, b) {
   return Math.sqrt(sum);
 }
 
+function normalizeTimeToHHmm(value, fallback) {
+  var defaultTime = fallback || "09:00";
+  if (value === null || value === undefined || value === "") return defaultTime;
+
+  if (Object.prototype.toString.call(value) === "[object Date]" && !isNaN(value.getTime())) {
+    return Utilities.formatDate(value, Session.getScriptTimeZone(), "HH:mm");
+  }
+
+  if (typeof value === "number" && !isNaN(value)) {
+    var totalMinutes;
+    if (value >= 0 && value < 1) {
+      totalMinutes = Math.round(value * 24 * 60);
+    } else if (value >= 0 && value <= 23) {
+      totalMinutes = Math.round(value * 60);
+    } else {
+      return defaultTime;
+    }
+    var hhNum = Math.floor(totalMinutes / 60) % 24;
+    var mmNum = totalMinutes % 60;
+    var hh = ("0" + hhNum).slice(-2);
+    var mm = ("0" + mmNum).slice(-2);
+    return hh + ":" + mm;
+  }
+
+  var text = String(value).trim();
+  var match = text.match(/^(\d{1,2}):(\d{1,2})(?::\d{1,2})?$/);
+  if (match) {
+    var h = Math.max(0, Math.min(23, parseInt(match[1], 10)));
+    var m = Math.max(0, Math.min(59, parseInt(match[2], 10)));
+    return ("0" + h).slice(-2) + ":" + ("0" + m).slice(-2);
+  }
+
+  return defaultTime;
+}
+
 /////////////////////////////
 // 🔥 VALIDATION
 /////////////////////////////
@@ -536,6 +571,7 @@ function doPost(e) {
           break;
         }
       }
+      workStart = normalizeTimeToHHmm(workStart, "09:15");
 
       if (dayOfWeek === 5 || dayOfWeek === 6) {
         manualStatus = "overtime";
