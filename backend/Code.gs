@@ -246,6 +246,15 @@ function doPost(e) {
         return json({success:false, message: "خطأ في إرسال التقرير: " + e.toString()});
       }
     }
+
+    // 3. SEND EMPLOYEE DETAILED REPORT (Manual Trigger)
+    if (action === "sendEmployeeDetailedReport") {
+      try {
+        return sendEmployeeDetailedReport(data);
+      } catch(e) {
+        return json({success:false, message: "خطأ في إرسال التقرير التفصيلي: " + e.toString()});
+      }
+    }
     
     // LOGIN
     if (action === "login") {
@@ -634,6 +643,195 @@ function sendManualReport(ss, data) {
   });
 
   return json({success:true});
+}
+
+function sendEmployeeDetailedReport(data) {
+  if (!data.employeeId) throw new Error("يرجى اختيار الموظف");
+  if (!data.startDate || !data.endDate) throw new Error("يرجى تحديد الفترة الزمنية");
+
+  var start = new Date(data.startDate);
+  start.setHours(0, 0, 0, 0);
+  var end = new Date(data.endDate);
+  end.setHours(23, 59, 59, 999);
+  if (start > end) throw new Error("تاريخ البداية يجب أن يكون قبل تاريخ النهاية");
+
+  var settings = getSettingsObject();
+  var emails = (data.email || "").toString().trim();
+  if (!emails) emails = (settings.reportEmails || "").toString().trim();
+  if (!emails) throw new Error("يرجى إدخال بريد الإرسال أو ضبط إيميلات التقارير من الإعدادات");
+
+  var records = getAttendanceInRange(start, end).filter(function(r) {
+    return String(r.employeeId) === String(data.employeeId);
+  });
+
+  if (records.length === 0) {
+    return json({ success: false, message: "لا توجد عمليات لهذا الموظف ضمن الفترة المحددة" });
+  }
+
+  var employeeName = (data.employeeName || records[0].employeeName || data.employeeId || "").toString();
+  var stats = calculateEmployeeDetailedStats(records, start, end);
+  var title = "التقرير التفصيلي للموظف: " + employeeName + " | " + start.toLocaleDateString('ar-EG') + " - " + end.toLocaleDateString('ar-EG');
+  var htmlBody = generateEmployeeDetailedHTML(records, title, employeeName, stats, start, end);
+
+  GmailApp.sendEmail(emails, title,
+    "مرفق التقرير التفصيلي للموظف بصيغة Excel.", {
+    htmlBody: htmlBody,
+    attachments: [generateStyledExcel(records, title)],
+    name: "نظام الموارد البشرية"
+  });
+
+  return json({ success: true, message: "تم إرسال التقرير التفصيلي بنجاح" });
+}
+
+function getWorkingDaysCountInRange(startDate, endDate) {
+  var count = 0;
+  var tempDate = new Date(startDate);
+  tempDate.setHours(0, 0, 0, 0);
+  var finalDate = new Date(endDate);
+  finalDate.setHours(23, 59, 59, 999);
+
+  while (tempDate <= finalDate) {
+    if (tempDate.getDay() !== 5 && tempDate.getDay() !== 6) count++;
+    tempDate.setDate(tempDate.getDate() + 1);
+  }
+  return count;
+}
+
+function calculateEmployeeDetailedStats(records, startDate, endDate) {
+  var presentDates = {};
+  var lateDates = {};
+  var totalHours = 0;
+  var totalTransport = 0;
+
+  records.forEach(function(r) {
+    var checkInDate = new Date(r.checkIn);
+    if (!isNaN(checkInDate)) {
+      var dateKey = checkInDate.toDateString();
+      presentDates[dateKey] = true;
+      if (r.status === "late") lateDates[dateKey] = true;
+    }
+
+    var parsedHours = parseFloat(r.hours || 0);
+    if (!isNaN(parsedHours)) totalHours += parsedHours;
+
+    var parsedTransport = parseFloat(r.transport || 0);
+    if (!isNaN(parsedTransport)) totalTransport += parsedTransport;
+  });
+
+  var daysPresent = Object.keys(presentDates).length;
+  var lateDays = Object.keys(lateDates).length;
+  var workingDays = getWorkingDaysCountInRange(startDate, endDate);
+
+  return {
+    daysPresent: daysPresent,
+    daysAbsent: Math.max(workingDays - daysPresent, 0),
+    lateDays: lateDays,
+    totalHours: totalHours,
+    totalTransport: totalTransport,
+    operationsCount: records.length
+  };
+}
+
+function generateEmployeeDetailedHTML(records, title, employeeName, stats, startDate, endDate) {
+  var sorted = records.slice().sort(function(a, b) {
+    return new Date(b.checkIn) - new Date(a.checkIn);
+  });
+
+  var rows = sorted.map(function(r) {
+    var checkInDate = r.checkIn ? new Date(r.checkIn) : null;
+    var dateText = (checkInDate && !isNaN(checkInDate)) ? checkInDate.toLocaleDateString('ar-EG') : "-";
+    var checkInText = (checkInDate && !isNaN(checkInDate))
+      ? checkInDate.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })
+      : "-";
+
+    var checkOutText = "لم ينصرف بعد";
+    if (r.checkOut) {
+      var checkOutDate = new Date(r.checkOut);
+      checkOutText = (!isNaN(checkOutDate))
+        ? checkOutDate.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })
+        : r.checkOut;
+    }
+
+    var statusText = "حاضر";
+    var statusColor = "#10b981";
+    if (r.status === "late") {
+      statusText = "متأخر";
+      statusColor = "#ef4444";
+    } else if (r.status === "overtime") {
+      statusText = "عمل إضافي";
+      statusColor = "#3b82f6";
+    }
+
+    var parsedHours = parseFloat(r.hours);
+    var hoursText = isNaN(parsedHours) ? "-" : parsedHours.toFixed(2);
+    var parsedTransport = parseFloat(r.transport || 0);
+    var transportText = (isNaN(parsedTransport) ? 0 : parsedTransport).toFixed(2);
+
+    return `
+      <tr style="border-bottom:1px solid #e5e7eb;">
+        <td style="padding:10px 8px;">${dateText}</td>
+        <td style="padding:10px 8px;">${r.siteName || "-"}</td>
+        <td style="padding:10px 8px;" dir="ltr">${checkInText}</td>
+        <td style="padding:10px 8px;" dir="ltr">${checkOutText}</td>
+        <td style="padding:10px 8px;"><span style="background:${statusColor};color:#fff;padding:3px 10px;border-radius:20px;font-size:0.75rem;">${statusText}</span></td>
+        <td style="padding:10px 8px;">${hoursText}</td>
+        <td style="padding:10px 8px;">${transportText} ج.م</td>
+      </tr>
+    `;
+  }).join("");
+
+  return `
+    <div dir="rtl" style="font-family:'Tajawal','Segoe UI',Tahoma,sans-serif;background:#f8fafc;padding:20px;">
+      <div style="max-width:900px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:16px;overflow:hidden;">
+        <div style="background:linear-gradient(135deg,#4f46e5,#7c3aed);padding:20px;color:#fff;">
+          <h2 style="margin:0 0 8px 0;">${title}</h2>
+          <div style="opacity:0.9;">الموظف: ${employeeName} | الفترة: ${startDate.toLocaleDateString('ar-EG')} - ${endDate.toLocaleDateString('ar-EG')}</div>
+        </div>
+
+        <div style="padding:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;">
+          <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px;text-align:center;">
+            <div style="font-size:0.8rem;color:#64748b;">أيام الحضور</div>
+            <div style="font-size:1.4rem;font-weight:700;color:#1e293b;">${stats.daysPresent}</div>
+          </div>
+          <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:10px;text-align:center;">
+            <div style="font-size:0.8rem;color:#991b1b;">أيام الغياب</div>
+            <div style="font-size:1.4rem;font-weight:700;color:#dc2626;">${stats.daysAbsent}</div>
+          </div>
+          <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:10px;text-align:center;">
+            <div style="font-size:0.8rem;color:#9a3412;">أيام التأخير</div>
+            <div style="font-size:1.4rem;font-weight:700;color:#ea580c;">${stats.lateDays}</div>
+          </div>
+          <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px;text-align:center;">
+            <div style="font-size:0.8rem;color:#1d4ed8;">إجمالي الساعات</div>
+            <div style="font-size:1.4rem;font-weight:700;color:#2563eb;">${stats.totalHours.toFixed(2)}</div>
+          </div>
+          <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:10px;text-align:center;">
+            <div style="font-size:0.8rem;color:#166534;">إجمالي البدلات</div>
+            <div style="font-size:1.4rem;font-weight:700;color:#16a34a;">${stats.totalTransport.toFixed(2)} ج.م</div>
+          </div>
+        </div>
+
+        <div style="padding:0 16px 16px 16px;">
+          <table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
+            <thead>
+              <tr style="background:#f1f5f9;border-bottom:2px solid #e2e8f0;">
+                <th style="padding:10px 8px;text-align:right;">التاريخ</th>
+                <th style="padding:10px 8px;text-align:right;">الموقع</th>
+                <th style="padding:10px 8px;text-align:right;">وقت الحضور</th>
+                <th style="padding:10px 8px;text-align:right;">وقت الانصراف</th>
+                <th style="padding:10px 8px;text-align:right;">الحالة</th>
+                <th style="padding:10px 8px;text-align:right;">الساعات</th>
+                <th style="padding:10px 8px;text-align:right;">البدل</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 function sendMonthlyReport() {

@@ -15,6 +15,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('attendanceDateFilter').value = todayStr;
     document.getElementById('reportStartDate').value = firstDayOfMonth;
     document.getElementById('reportEndDate').value = todayStr;
+    document.getElementById('employeeReportStartDate').value = firstDayOfMonth;
+    document.getElementById('employeeReportEndDate').value = todayStr;
     
     checkSession();
 });
@@ -93,6 +95,7 @@ function showTab(tabName) {
     if (tabName === 'sites') fetchSites();
     if (tabName === 'siteRequests') fetchSiteRequests();
     if (tabName === 'reports') generateReport();
+    if (tabName === 'employeeDetails') initEmployeeDetailedTab();
     if (tabName === 'settings') fetchSettings();
 
     // Close sidebar on mobile after clicking a link
@@ -169,6 +172,236 @@ function renderAttendanceTable(data) {
     });
 }
 
+function getWorkingDaysCount(startDate, endDate) {
+    let workingDaysCount = 0;
+    const tempDate = new Date(startDate);
+    tempDate.setHours(0, 0, 0, 0);
+
+    const finalDate = new Date(endDate);
+    finalDate.setHours(23, 59, 59, 999);
+
+    while (tempDate <= finalDate) {
+        if (tempDate.getDay() !== 5 && tempDate.getDay() !== 6) {
+            workingDaysCount += 1;
+        }
+        tempDate.setDate(tempDate.getDate() + 1);
+    }
+    return workingDaysCount;
+}
+
+function getStatusMeta(status) {
+    if (status === 'late') return { text: 'متأخر', color: 'var(--danger)' };
+    if (status === 'overtime') return { text: 'عمل إضافي', color: '#3b82f6' };
+    return { text: 'حاضر', color: 'var(--secondary)' };
+}
+
+function resetEmployeeDetailedReportView(message) {
+    document.getElementById('employeeDetailPresent').innerText = '0';
+    document.getElementById('employeeDetailAbsent').innerText = '0';
+    document.getElementById('employeeDetailLate').innerText = '0';
+    document.getElementById('employeeDetailHours').innerText = '0.00';
+    document.getElementById('employeeDetailTransport').innerText = '0.00';
+    document.getElementById('employeeDetailMeta').innerText = message || 'اختر موظفًا وحدد الفترة الزمنية ثم اضغط "عرض التقرير".';
+
+    const tbody = document.getElementById('employeeDetailTableBody');
+    if (!tbody) return;
+    tbody.innerHTML = `
+        <tr>
+            <td colspan="7" class="employee-report-empty">لا توجد بيانات معروضة بعد.</td>
+        </tr>
+    `;
+}
+
+function populateEmployeeDetailEmployees() {
+    const select = document.getElementById('employeeDetailEmployee');
+    if (!select) return;
+
+    const currentValue = select.value;
+    const sortedEmployees = [...allEmployees].sort((a, b) =>
+        String(a.name || '').localeCompare(String(b.name || ''), 'ar')
+    );
+
+    select.innerHTML = '<option value="">اختر موظف</option>';
+    sortedEmployees.forEach(emp => {
+        const option = document.createElement('option');
+        option.value = emp.id;
+        option.textContent = `${emp.name} (${emp.id})`;
+        select.appendChild(option);
+    });
+
+    if (currentValue && sortedEmployees.some(emp => String(emp.id) === String(currentValue))) {
+        select.value = currentValue;
+    }
+}
+
+async function initEmployeeDetailedTab() {
+    if (!allEmployees.length) await fetchEmployees();
+    if (!allAttendanceData.length) await fetchAttendance();
+    populateEmployeeDetailEmployees();
+
+    const selectedEmployee = document.getElementById('employeeDetailEmployee').value;
+    if (selectedEmployee) {
+        await generateEmployeeDetailedReport();
+    } else {
+        resetEmployeeDetailedReportView();
+    }
+}
+
+async function generateEmployeeDetailedReport() {
+    const employeeSelect = document.getElementById('employeeDetailEmployee');
+    const employeeId = employeeSelect.value;
+    const startStr = document.getElementById('employeeReportStartDate').value;
+    const endStr = document.getElementById('employeeReportEndDate').value;
+
+    if (!employeeId) return alert('يرجى اختيار الموظف أولًا');
+    if (!startStr || !endStr) return alert('يرجى اختيار الفترة الزمنية أولًا');
+
+    const startDate = new Date(startStr);
+    startDate.setHours(0, 0, 0, 0);
+    const endDate = new Date(endStr);
+    endDate.setHours(23, 59, 59, 999);
+
+    if (startDate > endDate) return alert('تاريخ البداية يجب أن يكون قبل تاريخ النهاية');
+
+    if (!allAttendanceData.length) {
+        await fetchAttendance();
+    }
+
+    const employeeRecords = allAttendanceData.filter(record => {
+        const checkInDate = new Date(record.checkIn);
+        if (isNaN(checkInDate)) return false;
+        return String(record.employeeId) === String(employeeId) && checkInDate >= startDate && checkInDate <= endDate;
+    });
+
+    const sortedRecords = [...employeeRecords].sort((a, b) => new Date(b.checkIn) - new Date(a.checkIn));
+    const presentDates = new Set();
+    const lateDates = new Set();
+    let totalHours = 0;
+    let totalTransport = 0;
+
+    sortedRecords.forEach(record => {
+        const recordDate = new Date(record.checkIn);
+        if (!isNaN(recordDate)) {
+            const dateKey = recordDate.toDateString();
+            presentDates.add(dateKey);
+            if (record.status === 'late') lateDates.add(dateKey);
+        }
+
+        const parsedHours = parseFloat(record.totalHours || 0);
+        if (!isNaN(parsedHours)) totalHours += parsedHours;
+
+        const parsedTransport = parseFloat(record.transportPrice || 0);
+        if (!isNaN(parsedTransport)) totalTransport += parsedTransport;
+    });
+
+    const workingDaysCount = getWorkingDaysCount(startDate, endDate);
+    const daysPresent = presentDates.size;
+    const daysAbsent = Math.max(workingDaysCount - daysPresent, 0);
+
+    document.getElementById('employeeDetailPresent').innerText = String(daysPresent);
+    document.getElementById('employeeDetailAbsent').innerText = String(daysAbsent);
+    document.getElementById('employeeDetailLate').innerText = String(lateDates.size);
+    document.getElementById('employeeDetailHours').innerText = totalHours.toFixed(2);
+    document.getElementById('employeeDetailTransport').innerText = totalTransport.toFixed(2);
+
+    const selectedLabel = employeeSelect.options[employeeSelect.selectedIndex]
+        ? employeeSelect.options[employeeSelect.selectedIndex].textContent
+        : employeeId;
+    const employeeName = selectedLabel.replace(/\s*\(.+\)\s*$/, '').trim() || selectedLabel;
+    document.getElementById('employeeDetailMeta').innerText =
+        `الموظف: ${employeeName} | الفترة: ${startDate.toLocaleDateString('ar-EG')} - ${endDate.toLocaleDateString('ar-EG')} | عدد العمليات: ${sortedRecords.length}`;
+
+    const tbody = document.getElementById('employeeDetailTableBody');
+    if (sortedRecords.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="7" class="employee-report-empty">لا توجد عمليات لهذا الموظف خلال الفترة المحددة.</td>
+            </tr>
+        `;
+        return;
+    }
+
+    tbody.innerHTML = '';
+    sortedRecords.forEach(record => {
+        const checkInObj = new Date(record.checkIn);
+        const dateText = !isNaN(checkInObj) ? checkInObj.toLocaleDateString('ar-EG') : '-';
+        const checkInText = !isNaN(checkInObj)
+            ? checkInObj.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })
+            : (record.checkIn || '-');
+
+        let checkOutText = 'لم ينصرف بعد';
+        if (record.checkOut) {
+            const checkOutObj = new Date(record.checkOut);
+            checkOutText = !isNaN(checkOutObj)
+                ? checkOutObj.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })
+                : (record.checkOut || '-');
+        }
+
+        const statusMeta = getStatusMeta(record.status);
+        const parsedHours = parseFloat(record.totalHours);
+        const hoursText = !isNaN(parsedHours) ? `${parsedHours.toFixed(2)} ساعة` : '-';
+        const parsedTransport = parseFloat(record.transportPrice || 0);
+        const transportText = `${isNaN(parsedTransport) ? 0 : parsedTransport.toFixed(2)} ج.م`;
+
+        tbody.innerHTML += `
+            <tr>
+                <td data-label="التاريخ">${dateText}</td>
+                <td data-label="الموقع">${record.siteName || '-'}</td>
+                <td data-label="وقت الحضور" dir="ltr">${checkInText}</td>
+                <td data-label="وقت الانصراف" dir="ltr">${checkOutText}</td>
+                <td data-label="الحالة"><span style="color:${statusMeta.color}">${statusMeta.text}</span></td>
+                <td data-label="الساعات">${hoursText}</td>
+                <td data-label="البدل">${transportText}</td>
+            </tr>
+        `;
+    });
+}
+
+async function sendEmployeeDetailedReport() {
+    const employeeSelect = document.getElementById('employeeDetailEmployee');
+    const employeeId = employeeSelect.value;
+    const startStr = document.getElementById('employeeReportStartDate').value;
+    const endStr = document.getElementById('employeeReportEndDate').value;
+    const customEmail = document.getElementById('employeeReportEmail').value.trim();
+
+    if (!employeeId) return alert('يرجى اختيار الموظف أولًا');
+    if (!startStr || !endStr) return alert('يرجى اختيار الفترة الزمنية أولًا');
+
+    const startDate = new Date(startStr);
+    const endDate = new Date(endStr);
+    if (startDate > endDate) return alert('تاريخ البداية يجب أن يكون قبل تاريخ النهاية');
+
+    const selectedLabel = employeeSelect.options[employeeSelect.selectedIndex]
+        ? employeeSelect.options[employeeSelect.selectedIndex].textContent
+        : employeeId;
+    const employeeName = selectedLabel.replace(/\s*\(.+\)\s*$/, '').trim() || selectedLabel;
+
+    const receiverText = customEmail ? `إلى: ${customEmail}` : 'إلى الإيميلات المسجلة في الإعدادات';
+    if (!confirm(`هل تريد إرسال التقرير التفصيلي للموظف "${employeeName}" ${receiverText}؟`)) return;
+
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({
+                action: 'sendEmployeeDetailedReport',
+                employeeId: employeeId,
+                employeeName: employeeName,
+                startDate: startStr,
+                endDate: endStr,
+                email: customEmail
+            }),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const result = await res.json();
+        alert(result.success ? (result.message || '✅ تم إرسال التقرير بنجاح') : `❌ فشل الإرسال: ${result.message}`);
+    } catch (e) {
+        console.error(e);
+        alert('حدث خطأ في الاتصال أثناء إرسال التقرير');
+    }
+    document.getElementById('loader').classList.add('hidden');
+}
+
 // Reports Logic
 function generateReport() {
     const startStr = document.getElementById('reportStartDate').value;
@@ -225,14 +458,7 @@ function generateReport() {
     });
 
     // Calculate working days passed in the selected range
-    let workingDaysCount = 0;
-    let tempDate = new Date(startDate);
-    while (tempDate <= endDate) {
-        if (tempDate.getDay() !== 5 && tempDate.getDay() !== 6) { // Skip Fri/Sat
-            workingDaysCount++;
-        }
-        tempDate.setDate(tempDate.getDate() + 1);
-    }
+    const workingDaysCount = getWorkingDaysCount(startDate, endDate);
 
     let kpiTotalHours = 0;
     let kpiTotalLates = 0;
@@ -358,6 +584,7 @@ async function fetchEmployees() {
         const result = await res.json();
         if(result.success) {
             allEmployees = result.data; // Store for editing
+            populateEmployeeDetailEmployees();
             const tbody = document.getElementById('employeesTableBody');
             tbody.innerHTML = '';
             result.data.forEach(record => {
