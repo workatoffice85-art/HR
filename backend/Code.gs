@@ -24,6 +24,143 @@ function getOrCreateSheet(name, headers) {
   return sheet;
 }
 
+var SITE_REQUEST_HEADERS = [
+  "id",
+  "employeeId",
+  "employeeName",
+  "latitude",
+  "longitude",
+  "suggestedName",
+  "mapLink",
+  "status",
+  "timestamp",
+  "transportPrice",
+  "note",
+  "receiptUrl",
+  "receiptName",
+  "tempRadius",
+  "approvedAt"
+];
+
+var SITE_REQUEST_COL = {
+  ID: 0,
+  EMPLOYEE_ID: 1,
+  EMPLOYEE_NAME: 2,
+  LATITUDE: 3,
+  LONGITUDE: 4,
+  SUGGESTED_NAME: 5,
+  MAP_LINK: 6,
+  STATUS: 7,
+  CREATED_AT: 8,
+  TRANSPORT_PRICE: 9,
+  NOTE: 10,
+  RECEIPT_URL: 11,
+  RECEIPT_NAME: 12,
+  TEMP_RADIUS: 13,
+  APPROVED_AT: 14
+};
+
+function ensureSheetHeaders(sheet, headers) {
+  if (!sheet || !headers || !headers.length) return;
+
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(headers);
+    return;
+  }
+
+  var requiredColumns = headers.length;
+  if (sheet.getLastColumn() < requiredColumns) {
+    sheet.insertColumnsAfter(sheet.getLastColumn(), requiredColumns - sheet.getLastColumn());
+  }
+
+  var current = sheet.getRange(1, 1, 1, requiredColumns).getValues()[0];
+  var changed = false;
+  for (var i = 0; i < requiredColumns; i++) {
+    if (String(current[i] || "") !== headers[i]) {
+      current[i] = headers[i];
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    sheet.getRange(1, 1, 1, requiredColumns).setValues([current]);
+  }
+}
+
+function getSiteRequestsSheet() {
+  var sheet = getOrCreateSheet("siteRequests", SITE_REQUEST_HEADERS);
+  ensureSheetHeaders(sheet, SITE_REQUEST_HEADERS);
+  return sheet;
+}
+
+function getTodayKey() {
+  return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
+}
+
+function toDateKey(value) {
+  if (!value) return "";
+  var dateObj = new Date(value);
+  if (isNaN(dateObj.getTime())) return "";
+  return Utilities.formatDate(dateObj, Session.getScriptTimeZone(), "yyyy-MM-dd");
+}
+
+function isApprovedTodayRequestActive(row) {
+  if (!row || String(row[SITE_REQUEST_COL.STATUS] || "") !== "approved_today") return false;
+  var approvedAt = row[SITE_REQUEST_COL.APPROVED_AT] || row[SITE_REQUEST_COL.CREATED_AT];
+  return toDateKey(approvedAt) === getTodayKey();
+}
+
+function getSiteRequestAttachmentFolder() {
+  var folderName = "HR_SiteRequest_Attachments";
+  var existing = DriveApp.getFoldersByName(folderName);
+  if (existing.hasNext()) return existing.next();
+  return DriveApp.createFolder(folderName);
+}
+
+function buildReceiptAttachment(data, requestId, employeeId) {
+  if (!data || typeof data !== "object") return null;
+
+  var rawDataUrl = String(data.dataUrl || "");
+  var rawBase64 = String(data.base64 || "");
+  var mimeType = String(data.type || "application/octet-stream");
+  var fileName = String(data.name || ("receipt_" + requestId + ".jpg"));
+
+  if (rawDataUrl && rawDataUrl.indexOf("base64,") !== -1) {
+    var parts = rawDataUrl.split("base64,");
+    rawBase64 = parts[1] || "";
+    var mimeMatch = String(parts[0] || "").match(/^data:([^;]+);base64$/);
+    if (mimeMatch && mimeMatch[1]) mimeType = mimeMatch[1];
+  }
+
+  if (!rawBase64) return null;
+  if (rawBase64.length > 8 * 1024 * 1024) {
+    throw new Error("Attachment is too large. Maximum allowed size is 5MB.");
+  }
+
+  var fileExt = "";
+  if (mimeType.indexOf("image/") === 0) {
+    fileExt = "." + mimeType.replace("image/", "").replace(/[^\w]/g, "");
+  }
+  if (!fileExt) fileExt = ".jpg";
+
+  var normalizedName = fileName.replace(/[\\/:*?\"<>|]/g, "_");
+  if (!/\.[a-zA-Z0-9]{2,5}$/.test(normalizedName)) {
+    normalizedName += fileExt;
+  }
+
+  var bytes = Utilities.base64Decode(rawBase64);
+  var blob = Utilities.newBlob(bytes, mimeType, normalizedName);
+  var folder = getSiteRequestAttachmentFolder();
+  var file = folder.createFile(blob);
+  file.setName("req_" + requestId + "_emp_" + employeeId + "_" + file.getName());
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+
+  return {
+    url: file.getUrl(),
+    name: file.getName()
+  };
+}
+
 /////////////////////////////
 // 🔥 DISTANCE
 /////////////////////////////
@@ -224,13 +361,11 @@ function getEmployeeTransportMap() {
 }
 
 function getRequestTransportMap() {
-  var sheet = getOrCreateSheet("siteRequests",
-    ["id", "employeeId", "employeeName", "latitude", "longitude", "suggestedName", "mapLink", "status", "timestamp", "transportPrice"]
-  );
+  var sheet = getSiteRequestsSheet();
   var rows = sheet.getDataRange().getValues();
   var map = {};
   for (var i = 1; i < rows.length; i++) {
-    map[String(rows[i][0])] = toNumberSafe(rows[i][9], 0);
+    map[String(rows[i][SITE_REQUEST_COL.ID])] = toNumberSafe(rows[i][SITE_REQUEST_COL.TRANSPORT_PRICE], 0);
   }
   return map;
 }
@@ -373,25 +508,28 @@ function validateAll(ss, data) {
     }
   }
 
-  // 2. Check Temporary Approvals (Approved Today)
-  var reqSheet = getOrCreateSheet("siteRequests", ["id", "employeeId", "employeeName", "latitude", "longitude", "suggestedName", "mapLink", "status", "timestamp", "transportPrice"]);
+  // 2. Check Temporary Approvals (Approved for today only)
+  var reqSheet = getSiteRequestsSheet();
   var reqRows = reqSheet.getDataRange().getValues();
-  var today = new Date().toDateString();
 
   for (var j = reqRows.length - 1; j >= 1; j--) {
-    if (reqRows[j][1] == data.employeeId && reqRows[j][7] === "approved_today") {
-      var reqDate = new Date(reqRows[j][8]).toDateString();
-      if (reqDate === today) {
-        var dist = getDistance(
-          parseFloat(data.latitude),
-          parseFloat(data.longitude),
-          parseFloat(reqRows[j][3]),
-          parseFloat(reqRows[j][4])
-        );
-        if (dist <= 100) { // Default 100m for temp requests
-          return { id: reqRows[j][0], name: reqRows[j][5], transportPrice: toNumberSafe(reqRows[j][9], 0) };
-        }
-      }
+    var row = reqRows[j];
+    if (String(row[SITE_REQUEST_COL.EMPLOYEE_ID]) !== String(data.employeeId)) continue;
+    if (!isApprovedTodayRequestActive(row)) continue;
+
+    var tempRadius = toNumberSafe(row[SITE_REQUEST_COL.TEMP_RADIUS], 100);
+    var dist = getDistance(
+      parseFloat(data.latitude),
+      parseFloat(data.longitude),
+      parseFloat(row[SITE_REQUEST_COL.LATITUDE]),
+      parseFloat(row[SITE_REQUEST_COL.LONGITUDE])
+    );
+    if (dist <= tempRadius) {
+      return {
+        id: row[SITE_REQUEST_COL.ID],
+        name: row[SITE_REQUEST_COL.SUGGESTED_NAME],
+        transportPrice: toNumberSafe(row[SITE_REQUEST_COL.TRANSPORT_PRICE], 0)
+      };
     }
   }
 
@@ -423,19 +561,49 @@ function doGet(e) {
     }
 
     if (action === "getSites") {
-      var s = getOrCreateSheet("sites",
+      var sitesSheet = getOrCreateSheet("sites",
         ["id","name","latitude","longitude","radius","transportPrice"]
       );
+      var employeeFilter = String(e.parameter.employeeId || "");
+      var sitesRows = sitesSheet.getDataRange().getValues();
+      sitesRows.shift();
 
-      var d = s.getDataRange().getValues();
-      d.shift();
-
-      return json({
-        success:true,
-        data:d.map(function(r) { return {
-          id:String(r[0]), name:r[1], latitude:parseFloat(r[2]), longitude:parseFloat(r[3]), radius:parseFloat(r[4]), transportPrice:toNumberSafe(r[5], 0)
-        };})
+      var siteData = sitesRows.map(function(r) {
+        return {
+          id: String(r[0]),
+          name: r[1],
+          latitude: parseFloat(r[2]),
+          longitude: parseFloat(r[3]),
+          radius: toNumberSafe(r[4], 20),
+          transportPrice: toNumberSafe(r[5], 0),
+          isTemporary: false
+        };
       });
+
+      var reqSheet = getSiteRequestsSheet();
+      var reqRows = reqSheet.getDataRange().getValues();
+      reqRows.shift();
+
+      for (var i = 0; i < reqRows.length; i++) {
+        var req = reqRows[i];
+        if (!isApprovedTodayRequestActive(req)) continue;
+        if (employeeFilter && String(req[SITE_REQUEST_COL.EMPLOYEE_ID]) !== employeeFilter) continue;
+
+        siteData.push({
+          id: String(req[SITE_REQUEST_COL.ID]),
+          name: req[SITE_REQUEST_COL.SUGGESTED_NAME],
+          latitude: parseFloat(req[SITE_REQUEST_COL.LATITUDE]),
+          longitude: parseFloat(req[SITE_REQUEST_COL.LONGITUDE]),
+          radius: toNumberSafe(req[SITE_REQUEST_COL.TEMP_RADIUS], 100),
+          transportPrice: toNumberSafe(req[SITE_REQUEST_COL.TRANSPORT_PRICE], 0),
+          isTemporary: true,
+          temporaryForEmployeeId: String(req[SITE_REQUEST_COL.EMPLOYEE_ID]),
+          approvedAt: req[SITE_REQUEST_COL.APPROVED_AT] || "",
+          approvalMode: "today"
+        });
+      }
+
+      return json({ success: true, data: siteData });
     }
 
     if (action === "getAttendance") {
@@ -478,14 +646,31 @@ function doGet(e) {
     }
 
     if (action === "getSiteRequests") {
-      var s = getOrCreateSheet("siteRequests", ["id", "employeeId", "employeeName", "latitude", "longitude", "suggestedName", "mapLink", "status", "timestamp", "transportPrice"]);
+      var s = getSiteRequestsSheet();
       var d = s.getDataRange().getValues();
       d.shift();
       return json({
         success: true,
-        data: d.map(function(r) { return {
-          id: r[0], employeeId: r[1], employeeName: r[2], latitude: r[3], longitude: r[4], suggestedName: r[5], mapLink: r[6], status: r[7], timestamp: r[8], transportPrice: toNumberSafe(r[9], 0)
-        };})
+        data: d.map(function(r) {
+          return {
+            id: r[SITE_REQUEST_COL.ID],
+            employeeId: r[SITE_REQUEST_COL.EMPLOYEE_ID],
+            employeeName: r[SITE_REQUEST_COL.EMPLOYEE_NAME],
+            latitude: r[SITE_REQUEST_COL.LATITUDE],
+            longitude: r[SITE_REQUEST_COL.LONGITUDE],
+            suggestedName: r[SITE_REQUEST_COL.SUGGESTED_NAME],
+            mapLink: r[SITE_REQUEST_COL.MAP_LINK],
+            status: r[SITE_REQUEST_COL.STATUS],
+            timestamp: r[SITE_REQUEST_COL.CREATED_AT],
+            transportPrice: toNumberSafe(r[SITE_REQUEST_COL.TRANSPORT_PRICE], 0),
+            note: String(r[SITE_REQUEST_COL.NOTE] || ""),
+            receiptUrl: String(r[SITE_REQUEST_COL.RECEIPT_URL] || ""),
+            receiptName: String(r[SITE_REQUEST_COL.RECEIPT_NAME] || ""),
+            tempRadius: toNumberSafe(r[SITE_REQUEST_COL.TEMP_RADIUS], 100),
+            approvedAt: r[SITE_REQUEST_COL.APPROVED_AT] || "",
+            isActiveToday: isApprovedTodayRequestActive(r)
+          };
+        })
       });
     }
 
@@ -750,38 +935,64 @@ function doPost(e) {
 
     // SITE REQUESTS
     if (data.action === "addSiteRequest") {
-      var s = getOrCreateSheet("siteRequests", ["id", "employeeId", "employeeName", "latitude", "longitude", "suggestedName", "mapLink", "status", "timestamp", "transportPrice"]);
+      var s = getSiteRequestsSheet();
+      var requestId = "REQ" + Math.floor(10000 + Math.random() * 90000);
+      var note = String(data.note || "").trim();
+      var attachment = buildReceiptAttachment(data.receiptImage, requestId, data.employeeId);
+
       s.appendRow([
-        "REQ" + Math.floor(10000 + Math.random() * 90000),
-        data.employeeId, data.employeeName, data.latitude, data.longitude, data.suggestedName, data.mapLink || "", "pending", new Date().toISOString(), 120 // Default 120
+        requestId,
+        data.employeeId,
+        data.employeeName,
+        data.latitude,
+        data.longitude,
+        data.suggestedName,
+        data.mapLink || "",
+        "pending",
+        new Date().toISOString(),
+        120,
+        note,
+        attachment ? attachment.url : "",
+        attachment ? attachment.name : "",
+        "",
+        ""
       ]);
       return json({ success: true, message: "تم إرسال طلب تسجيل الموقع بنجاح، بانتظار موافقة الإدارة." });
     }
 
     if (data.action === "approveSiteRequest") {
-      var reqSheet = getOrCreateSheet("siteRequests", ["id", "employeeId", "employeeName", "latitude", "longitude", "suggestedName", "mapLink", "status", "timestamp", "transportPrice"]);
+      var reqSheet = getSiteRequestsSheet();
       var sitesSheet = getOrCreateSheet("sites", ["id", "name", "latitude", "longitude", "radius", "transportPrice"]);
       var rows = reqSheet.getDataRange().getValues();
       var approvedRequestTransport = toNumberSafe(data.transportPrice, 120);
+      var approvedRadius = toNumberSafe(data.radius, 100);
+      var approvedAt = new Date().toISOString();
       
       for (var i = 1; i < rows.length; i++) {
-        if (String(rows[i][0]) === String(data.id)) {
+        var row = rows[i];
+        if (String(row[SITE_REQUEST_COL.ID]) === String(data.id)) {
           
           if (data.mode === "always") {
             // Add to permanent sites
             sitesSheet.appendRow([
               Math.floor(10000 + Math.random() * 90000),
-              data.name || rows[i][5],
-              rows[i][3], rows[i][4], data.radius || 100, approvedRequestTransport
+              data.name || row[SITE_REQUEST_COL.SUGGESTED_NAME],
+              row[SITE_REQUEST_COL.LATITUDE],
+              row[SITE_REQUEST_COL.LONGITUDE],
+              approvedRadius,
+              approvedRequestTransport
             ]);
-            reqSheet.getRange(i + 1, 8).setValue("approved");
+            reqSheet.getRange(i + 1, SITE_REQUEST_COL.STATUS + 1).setValue("approved");
+            reqSheet.getRange(i + 1, SITE_REQUEST_COL.TEMP_RADIUS + 1).setValue("");
           } else {
             // Approve for today only
-            reqSheet.getRange(i + 1, 8).setValue("approved_today");
+            reqSheet.getRange(i + 1, SITE_REQUEST_COL.STATUS + 1).setValue("approved_today");
+            reqSheet.getRange(i + 1, SITE_REQUEST_COL.TEMP_RADIUS + 1).setValue(approvedRadius);
           }
           
-          reqSheet.getRange(i + 1, 10).setValue(approvedRequestTransport);
-          syncAttendanceTransportForRequest(rows[i][0], approvedRequestTransport);
+          reqSheet.getRange(i + 1, SITE_REQUEST_COL.TRANSPORT_PRICE + 1).setValue(approvedRequestTransport);
+          reqSheet.getRange(i + 1, SITE_REQUEST_COL.APPROVED_AT + 1).setValue(approvedAt);
+          syncAttendanceTransportForRequest(row[SITE_REQUEST_COL.ID], approvedRequestTransport);
           return json({ success: true, message: "تمت الموافقة على الموقع بنجاح." });
         }
       }
@@ -789,11 +1000,11 @@ function doPost(e) {
     }
 
     if (data.action === "rejectSiteRequest") {
-      var s = getOrCreateSheet("siteRequests", ["id", "employeeId", "employeeName", "latitude", "longitude", "suggestedName", "mapLink", "status", "timestamp", "transportPrice"]);
+      var s = getSiteRequestsSheet();
       var rows = s.getDataRange().getValues();
       for (var i = 1; i < rows.length; i++) {
-        if (String(rows[i][0]) === String(data.id)) {
-          s.getRange(i + 1, 8).setValue("rejected");
+        if (String(rows[i][SITE_REQUEST_COL.ID]) === String(data.id)) {
+          s.getRange(i + 1, SITE_REQUEST_COL.STATUS + 1).setValue("rejected");
           return json({ success: true, message: "تم رفض الطلب." });
         }
       }

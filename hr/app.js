@@ -655,16 +655,25 @@ async function fetchSites() {
             tbody.innerHTML = '';
             result.data.forEach(record => {
                 console.log("Rendering site record:", record);
+                const isTemporary = Boolean(record.isTemporary);
+                const siteName = isTemporary
+                    ? `${record.name} <small style="color:#f59e0b;">(مؤقت - اليوم فقط)</small>`
+                    : record.name;
+                const actions = isTemporary
+                    ? '<span style="color:var(--text-muted);">-</span>'
+                    : `
+                        <button class="btn-primary" style="padding:5px 12px; font-size:0.85rem; width:auto;" onclick="editSite('${record.id}')">تعديل ✏️</button>
+                        <button class="btn-danger" style="padding:5px 12px; font-size:0.85rem; width:auto; background:rgba(239,68,68,0.1); border:1px solid var(--danger); color:var(--danger);" onclick="deleteEntity('deleteSite', '${record.id}', '${record.name}')">حذف 🗑️</button>
+                    `;
                 const row = document.createElement('tr');
                 row.innerHTML = `
-                    <td data-label="اسم الموقع">${record.name}</td>
+                    <td data-label="اسم الموقع">${siteName}</td>
                     <td data-label="خط العرض">${record.latitude}</td>
                     <td data-label="خط الطول">${record.longitude}</td>
                     <td data-label="النطاق">${record.radius} متر</td>
                     <td data-label="البدل">${record.transportPrice || 0} ج.م</td>
                     <td data-label="الإجراءات" style="display:flex; gap:8px; justify-content:center; padding:10px;">
-                        <button class="btn-primary" style="padding:5px 12px; font-size:0.85rem; width:auto;" onclick="editSite('${record.id}')">تعديل ✏️</button>
-                        <button class="btn-danger" style="padding:5px 12px; font-size:0.85rem; width:auto; background:rgba(239,68,68,0.1); border:1px solid var(--danger); color:var(--danger);" onclick="deleteEntity('deleteSite', '${record.id}', '${record.name}')">حذف 🗑️</button>
+                        ${actions}
                     </td>
                 `;
                 tbody.appendChild(row);
@@ -695,6 +704,10 @@ function editEmployee(id) {
 function editSite(id) {
     const site = allSites.find(s => String(s.id) === String(id));
     if(!site) return;
+    if (site.isTemporary) {
+        alert('هذا موقع مؤقت (موافقة اليوم فقط) ولا يمكن تعديله من إدارة المواقع.');
+        return;
+    }
     document.getElementById('editSiteId').value = site.id;
     document.getElementById('siteModalTitle').innerText = 'تعديل بيانات الموقع';
     document.getElementById('siteName').value = site.name;
@@ -987,10 +1000,13 @@ function renderSiteRequestsTable(data) {
     [...data].reverse().forEach(req => {
         let statusText = 'قيد الانتظار';
         let statusColor = 'var(--warning)';
-        
+
         if (req.status === 'approved') {
-            statusText = 'تمت الموافقة';
+            statusText = 'تمت الموافقة (دائم)';
             statusColor = 'var(--secondary)';
+        } else if (req.status === 'approved_today') {
+            statusText = req.isActiveToday ? 'موافقة اليوم فقط (نشط)' : 'موافقة اليوم فقط (انتهت)';
+            statusColor = req.isActiveToday ? '#22c55e' : 'var(--text-muted)';
         } else if (req.status === 'rejected') {
             statusText = 'مرفوض';
             statusColor = 'var(--danger)';
@@ -999,20 +1015,31 @@ function renderSiteRequestsTable(data) {
         const actions = req.status === 'pending' ? `
             <div style="display:flex; gap:8px;">
                 <button class="btn-primary" style="padding:5px 12px; font-size:0.85rem; width:auto; background:var(--secondary);" onclick="approveRequest('${req.id}', '${req.suggestedName}')">موافقة ✓</button>
-                <button class="btn-danger" style="padding:5px 12px; font-size:0.85rem; width:auto;" onclick="rejectRequest('${req.id}')">رفض ✗</button>
+                <button class="btn-danger" style="padding:5px 12px; font-size:0.85rem; width:auto;" onclick="rejectRequest('${req.id}')">رفض ✕</button>
             </div>
         ` : '-';
 
-        const mapLinkHtml = req.mapLink ? `<a href="${req.mapLink}" target="_blank" style="color:var(--primary); text-decoration:underline;">فتح الرابط 📍</a>` : 'لا يوجد';
+        const mapLinkHtml = req.mapLink
+            ? `<a href="${req.mapLink}" target="_blank" style="color:var(--primary); text-decoration:underline;">فتح الرابط 📍</a>`
+            : 'لا يوجد';
+        const noteText = (req.note || '').trim() || '-';
+        const receiptHtml = req.receiptUrl
+            ? `<a href="${req.receiptUrl}" target="_blank" style="color:var(--secondary); text-decoration:underline;">${req.receiptName || 'عرض المرفق'}</a>`
+            : '-';
 
         const dateObj = req.timestamp ? new Date(req.timestamp) : null;
-        const dateStr = (dateObj && !isNaN(dateObj)) ? dateObj.toLocaleString('ar-EG') : (req.timestamp || '-');
+        const createdStr = (dateObj && !isNaN(dateObj)) ? dateObj.toLocaleString('ar-EG') : (req.timestamp || '-');
+        const approvedObj = req.approvedAt ? new Date(req.approvedAt) : null;
+        const approvedStr = (approvedObj && !isNaN(approvedObj)) ? approvedObj.toLocaleString('ar-EG') : '';
+        const dateStr = approvedStr ? `${createdStr}<br><small style="color:var(--text-muted);">اعتماد: ${approvedStr}</small>` : createdStr;
 
         tbody.innerHTML += `
             <tr>
                 <td data-label="الموظف">${req.employeeName}</td>
                 <td data-label="اسم الموقع المقترح">${req.suggestedName}</td>
                 <td data-label="رابط الخريطة">${mapLinkHtml}</td>
+                <td data-label="ملاحظة الانتقالات">${noteText}</td>
+                <td data-label="مرفق">${receiptHtml}</td>
                 <td data-label="الإحداثيات" dir="ltr">${req.latitude}, ${req.longitude}</td>
                 <td data-label="التاريخ">${dateStr}</td>
                 <td data-label="الحالة"><span style="color:${statusColor}">${statusText}</span></td>
@@ -1021,7 +1048,6 @@ function renderSiteRequestsTable(data) {
         `;
     });
 }
-
 async function approveRequest(id, suggestedName) {
     document.getElementById('approveReqId').value = id;
     document.getElementById('approveSiteName').value = suggestedName;
@@ -1059,6 +1085,7 @@ async function confirmApproval(mode) {
             alert(result.message);
             closeApproveModal();
             fetchSiteRequests();
+            fetchSites();
         } else alert("خطأ: " + result.message);
     } catch(e) { console.error(e); alert("خطأ في الاتصال"); }
     document.getElementById('loader').classList.add('hidden');
@@ -1082,3 +1109,4 @@ async function rejectRequest(id) {
     } catch(e) { console.error(e); alert("خطأ في الاتصال"); }
     document.getElementById('loader').classList.add('hidden');
 }
+
