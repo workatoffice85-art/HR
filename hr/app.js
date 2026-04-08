@@ -5,6 +5,8 @@ let allEmployees = []; // Added here
 let allSites = [];    // Added here
 let hoursChartInstance = null;
 let latesChartInstance = null;
+let parseMapLinkTimer = null;
+let parseMapLinkRequestId = 0;
 
 document.addEventListener('DOMContentLoaded', () => {
     // Set default dates
@@ -795,68 +797,101 @@ async function saveEmployee() {
 function openSiteModal() { document.getElementById('siteModal').classList.remove('hidden'); }
 function closeSiteModal() { document.getElementById('siteModal').classList.add('hidden'); }
 
-async function parseMapLink() {
+function parseMapLink() {
+    if (parseMapLinkTimer) clearTimeout(parseMapLinkTimer);
+    parseMapLinkTimer = setTimeout(runParseMapLink, 300);
+}
+
+async function runParseMapLink() {
     const link = document.getElementById('siteMapLink').value.trim();
-    if (!link) return;
-    
-    // Check if it's a short link
-    if (link.includes('maps.app.goo.gl') || link.includes('goo.gl')) {
-        document.getElementById('siteLat').placeholder = 'جاري استخراج البيانات...';
-        document.getElementById('siteLng').placeholder = 'جاري استخراج البيانات...';
+    const latInput = document.getElementById('siteLat');
+    const lngInput = document.getElementById('siteLng');
+
+    if (!link) {
+        latInput.placeholder = 'تلقائي عبر الرابط';
+        lngInput.placeholder = 'تلقائي عبر الرابط';
+        return;
+    }
+
+    const currentRequestId = ++parseMapLinkRequestId;
+    latInput.value = '';
+    lngInput.value = '';
+    latInput.placeholder = 'جاري استخراج البيانات...';
+    lngInput.placeholder = 'جاري استخراج البيانات...';
+
+    let extracted = extractLatLngFromUrl(link);
+    const shouldAskBackend = link.includes('maps.app.goo.gl') || link.includes('goo.gl') || link.includes('google.com/maps');
+
+    if (!extracted && shouldAskBackend) {
         try {
             const res = await fetch(API_URL, {
                 method: 'POST', body: JSON.stringify({ action: 'resolveMapLink', link: link }), headers:{'Content-Type':'text/plain'}
             });
             const result = await res.json();
+            if (currentRequestId !== parseMapLinkRequestId) return;
+
             if (result.success) {
                 if (result.lat && result.lng) {
-                     document.getElementById('siteLat').value = result.lat;
-                     document.getElementById('siteLng').value = result.lng;
+                    extracted = { lat: String(result.lat), lng: String(result.lng) };
                 } else if (result.url) {
-                     extractLatLngFromUrl(result.url); // Fallback
-                } else {
-                     document.getElementById('siteLat').placeholder = 'فشل المعالجة';
-                     document.getElementById('siteLng').placeholder = 'فشل المعالجة';
+                    extracted = extractLatLngFromUrl(result.url);
                 }
             } else {
-                throw new Error("Backend Error: " + result.message);
+                throw new Error('Backend Error: ' + result.message);
             }
         } catch (e) {
             console.error('Failed to resolve link', e);
-            document.getElementById('siteLat').placeholder = 'فشل الاستخراج (انسخ الأرقام يدوياً)';
-            document.getElementById('siteLng').placeholder = 'فشل الاستخراج (انسخ الأرقام يدوياً)';
         }
-    } else {
-        extractLatLngFromUrl(link);
     }
+
+    if (currentRequestId !== parseMapLinkRequestId) return;
+
+    if (extracted) {
+        latInput.value = extracted.lat;
+        lngInput.value = extracted.lng;
+        latInput.placeholder = 'تلقائي عبر الرابط';
+        lngInput.placeholder = 'تلقائي عبر الرابط';
+        return;
+    }
+
+    latInput.placeholder = 'فشل الاستخراج (انسخ الأرقام يدوياً)';
+    lngInput.placeholder = 'فشل الاستخراج (انسخ الأرقام يدوياً)';
 }
 
 function extractLatLngFromUrl(url) {
-    // Check for @lat,lng format
-    const regex = /@(-?\d+\.\d+),(-?\d+\.\d+)/;
-    const match = url.match(regex);
-    if (match) {
-        document.getElementById('siteLat').value = match[1];
-        document.getElementById('siteLng').value = match[2];
-    } else {
-         // Check for ?q=lat,lng format
-         const regexQ = /[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/;
-         const matchQ = url.match(regexQ);
-         if (matchQ) {
-             document.getElementById('siteLat').value = matchQ[1];
-             document.getElementById('siteLng').value = matchQ[2];
-         } else {
-             // Fallback for short link redirect formats that might contain place/name/lat,lng
-             const regexPath = /place\/[^\/]+\/(-?\d+\.\d+),(-?\d+\.\d+)/;
-             const matchPath = url.match(regexPath);
-             if (matchPath) {
-                 document.getElementById('siteLat').value = matchPath[1];
-                 document.getElementById('siteLng').value = matchPath[2];
-             }
-         }
-    }
-}
+    if (!url) return null;
 
+    const candidates = [String(url)];
+    try {
+        const decoded = decodeURIComponent(String(url));
+        if (decoded !== url) candidates.push(decoded);
+        const decodedTwice = decodeURIComponent(decoded);
+        if (decodedTwice !== decoded && decodedTwice !== url) candidates.push(decodedTwice);
+    } catch (e) {}
+
+    const patterns = [
+        /@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/,
+        /[?&]q=(-?\d+(?:\.\d+)?)(?:%2C|,)(-?\d+(?:\.\d+)?)/i,
+        /[?&]query=(-?\d+(?:\.\d+)?)(?:%2C|,)(-?\d+(?:\.\d+)?)/i,
+        /center=(-?\d+(?:\.\d+)?)(?:%2C|,)(-?\d+(?:\.\d+)?)/i,
+        /!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/,
+        /place\/[^\/]+\/(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/i
+    ];
+
+    for (const candidate of candidates) {
+        for (const pattern of patterns) {
+            const match = candidate.match(pattern);
+            if (!match) continue;
+            const lat = parseFloat(match[1]);
+            const lng = parseFloat(match[2]);
+            if (Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+                return { lat: String(lat), lng: String(lng) };
+            }
+        }
+    }
+
+    return null;
+}
 async function saveSite() {
     const editId = document.getElementById('editSiteId').value;
     const name = document.getElementById('siteName').value.trim();

@@ -2,6 +2,9 @@
 // 🔥 CONFIG
 /////////////////////////////
 var FACE_THRESHOLD = 0.6;
+var AUTO_APPROVAL_WAIT_MS = 2 * 60 * 1000;
+var AUTO_APPROVAL_MAX_DISTANCE_METERS = 700;
+var AUTO_APPROVAL_META = "auto_2min_700m";
 
 /////////////////////////////
 // 🔥 GET SPREADSHEET
@@ -39,7 +42,10 @@ var SITE_REQUEST_HEADERS = [
   "receiptUrl",
   "receiptName",
   "tempRadius",
-  "approvedAt"
+  "approvedAt",
+  "mapLatitude",
+  "mapLongitude",
+  "autoMeta"
 ];
 
 var SITE_REQUEST_COL = {
@@ -57,7 +63,10 @@ var SITE_REQUEST_COL = {
   RECEIPT_URL: 11,
   RECEIPT_NAME: 12,
   TEMP_RADIUS: 13,
-  APPROVED_AT: 14
+  APPROVED_AT: 14,
+  MAP_LATITUDE: 15,
+  MAP_LONGITUDE: 16,
+  AUTO_META: 17
 };
 
 function ensureSheetHeaders(sheet, headers) {
@@ -110,11 +119,192 @@ function isApprovedTodayRequestActive(row) {
   return toDateKey(approvedAt) === getTodayKey();
 }
 
+function isFiniteNumberValue(value) {
+  return typeof value === "number" && !isNaN(value) && isFinite(value);
+}
+
+function decodeUriSafely(value) {
+  try {
+    return decodeURIComponent(String(value || ""));
+  } catch (e) {
+    return String(value || "");
+  }
+}
+
+function isLatLngInRange(lat, lng) {
+  return isFiniteNumberValue(lat) &&
+         isFiniteNumberValue(lng) &&
+         Math.abs(lat) <= 90 &&
+         Math.abs(lng) <= 180;
+}
+
+function extractLatLngFromMapText(text) {
+  var raw = String(text || "");
+  if (!raw) return null;
+
+  var candidates = [raw];
+  var decoded = decodeUriSafely(raw);
+  if (decoded !== raw) candidates.push(decoded);
+  var decodedTwice = decodeUriSafely(decoded);
+  if (decodedTwice !== decoded && decodedTwice !== raw) candidates.push(decodedTwice);
+
+  var patterns = [
+    /@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/,
+    /[?&]q=(-?\d+(?:\.\d+)?)(?:%2C|,)(-?\d+(?:\.\d+)?)/i,
+    /[?&]query=(-?\d+(?:\.\d+)?)(?:%2C|,)(-?\d+(?:\.\d+)?)/i,
+    /center=(-?\d+(?:\.\d+)?)(?:%2C|,)(-?\d+(?:\.\d+)?)/i,
+    /!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/,
+    /place\/[^\/]+\/(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/i
+  ];
+
+  for (var i = 0; i < candidates.length; i++) {
+    for (var p = 0; p < patterns.length; p++) {
+      var match = candidates[i].match(patterns[p]);
+      if (!match) continue;
+      var lat = parseFloat(match[1]);
+      var lng = parseFloat(match[2]);
+      if (isLatLngInRange(lat, lng)) {
+        return { lat: lat, lng: lng };
+      }
+    }
+  }
+
+  return null;
+}
+
+function resolveMapLinkData(link) {
+  var url = String(link || "").trim();
+  if (!url) {
+    return { success: false, message: "Map link is required." };
+  }
+
+  try {
+    for (var i = 0; i < 5; i++) {
+      var res = UrlFetchApp.fetch(url, {
+        followRedirects: false,
+        muteHttpExceptions: true,
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; HRSystem/1.0)" }
+      });
+      var loc = res.getHeaders()["Location"] || res.getHeaders()["location"];
+      if (!loc) break;
+      if (/^https?:\/\//i.test(loc)) {
+        url = loc;
+      } else if (String(loc).indexOf("/") === 0) {
+        url = "https://www.google.com" + loc;
+      } else {
+        break;
+      }
+    }
+
+    var extracted = extractLatLngFromMapText(url);
+
+    if (!extracted) {
+      var htmlRes = UrlFetchApp.fetch(url, {
+        muteHttpExceptions: true,
+        followRedirects: true,
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; HRSystem/1.0)" }
+      }).getContentText();
+      extracted = extractLatLngFromMapText(htmlRes);
+      if (!extracted) {
+        var htmlMatch = htmlRes.match(/\[null,null,(-?\d+\.\d+),(-?\d+\.\d+)\]/) ||
+                        htmlRes.match(/\[\[null,null,(-?\d+\.\d+),(-?\d+\.\d+)\]/) ||
+                        htmlRes.match(/\"(-?\d+\.\d+),(-?\d+\.\d+)\"/);
+        if (htmlMatch) {
+          var htmlLat = parseFloat(htmlMatch[1]);
+          var htmlLng = parseFloat(htmlMatch[2]);
+          if (isLatLngInRange(htmlLat, htmlLng)) {
+            extracted = { lat: htmlLat, lng: htmlLng };
+          }
+        }
+      }
+    }
+
+    if (extracted &&
+        Math.abs(extracted.lat - 37.42) < 0.05 &&
+        Math.abs(extracted.lng + 122.08) < 0.05) {
+      extracted = null;
+    }
+
+    return {
+      success: true,
+      url: url,
+      lat: extracted ? extracted.lat : null,
+      lng: extracted ? extracted.lng : null
+    };
+  } catch (e) {
+    return { success: false, message: "Failed to parse map link: " + e.toString() };
+  }
+}
+
+function validateMapLinkDistance(link, referenceLat, referenceLng, maxDistanceMeters) {
+  var refLat = parseFloat(referenceLat);
+  var refLng = parseFloat(referenceLng);
+  if (!isFiniteNumberValue(refLat) || !isFiniteNumberValue(refLng)) {
+    return { success: false, message: "Invalid reference coordinates." };
+  }
+
+  var resolved = resolveMapLinkData(link);
+  if (!resolved.success) return resolved;
+
+  var mapLat = parseFloat(resolved.lat);
+  var mapLng = parseFloat(resolved.lng);
+  if (!isFiniteNumberValue(mapLat) || !isFiniteNumberValue(mapLng)) {
+    return { success: false, message: "Could not extract map coordinates from link." };
+  }
+
+  var distance = getDistance(refLat, refLng, mapLat, mapLng);
+  if (distance > maxDistanceMeters) {
+    return {
+      success: false,
+      message: "Map link is too far from the selected location (" + distance.toFixed(0) + "m)."
+    };
+  }
+
+  return {
+    success: true,
+    url: resolved.url,
+    lat: mapLat,
+    lng: mapLng,
+    distance: distance
+  };
+}
+
+function deleteAttendanceForTemporaryRequestDay(requestRow) {
+  if (!requestRow) return 0;
+
+  var requestId = String(requestRow[SITE_REQUEST_COL.ID] || "");
+  var employeeId = String(requestRow[SITE_REQUEST_COL.EMPLOYEE_ID] || "");
+  var targetDateKey = toDateKey(requestRow[SITE_REQUEST_COL.APPROVED_AT] || requestRow[SITE_REQUEST_COL.CREATED_AT]);
+  if (!requestId || !employeeId || !targetDateKey) return 0;
+
+  var attendanceSheet = getOrCreateSheet("attendance",
+    ["employeeId","employeeName","siteId","siteName","checkIn","checkOut","latitude","longitude","status","totalHours","transportPrice"]
+  );
+  var rows = attendanceSheet.getDataRange().getValues();
+  if (rows.length <= 1) return 0;
+
+  var deletedCount = 0;
+  for (var i = rows.length - 1; i >= 1; i--) {
+    var row = rows[i];
+    if (String(row[0]) !== employeeId) continue;
+    if (String(row[2]) !== requestId) continue;
+    if (toDateKey(row[4]) !== targetDateKey) continue;
+    attendanceSheet.deleteRow(i + 1);
+    deletedCount++;
+  }
+
+  return deletedCount;
+}
+
 function getSiteRequestAttachmentFolder() {
   var folderName = "HR_SiteRequest_Attachments";
-  var existing = DriveApp.getFoldersByName(folderName);
-  if (existing.hasNext()) return existing.next();
-  return DriveApp.createFolder(folderName);
+  try {
+    var existing = DriveApp.getFoldersByName(folderName);
+    if (existing.hasNext()) return existing.next();
+    return DriveApp.createFolder(folderName);
+  } catch (e) {
+    throw new Error("خطأ في صلاحيات Google Drive: " + e.toString() + ". يجب التأكد من أن المشرف قام بتفعيل الصلاحيات من لوحة التحكم أو إعادة نشر التطبيق بخيار (Execute as: Me).");
+  }
 }
 
 function buildReceiptAttachment(data, requestId, employeeId) {
@@ -533,6 +723,65 @@ function validateAll(ss, data) {
     }
   }
 
+  // 3. Auto-Approval Logic:
+  // Pending > 2 minutes, employee near requested point, and map link within 700m.
+  for (var k = reqRows.length - 1; k >= 1; k--) {
+    var reqRow = reqRows[k];
+    if (String(reqRow[SITE_REQUEST_COL.EMPLOYEE_ID]) !== String(data.employeeId)) continue;
+    if (String(reqRow[SITE_REQUEST_COL.STATUS]) !== "pending") continue;
+
+    var createdAt = new Date(reqRow[SITE_REQUEST_COL.CREATED_AT]);
+    var now = new Date();
+    if (isNaN(createdAt.getTime())) continue;
+    if (now - createdAt < AUTO_APPROVAL_WAIT_MS) continue;
+
+    var reqLat = parseFloat(reqRow[SITE_REQUEST_COL.LATITUDE]);
+    var reqLng = parseFloat(reqRow[SITE_REQUEST_COL.LONGITUDE]);
+    var currentLat = parseFloat(data.latitude);
+    var currentLng = parseFloat(data.longitude);
+    if (!isFiniteNumberValue(reqLat) || !isFiniteNumberValue(reqLng) ||
+        !isFiniteNumberValue(currentLat) || !isFiniteNumberValue(currentLng)) {
+      continue;
+    }
+
+    var distToReq = getDistance(currentLat, currentLng, reqLat, reqLng);
+    if (distToReq > AUTO_APPROVAL_MAX_DISTANCE_METERS) continue;
+
+    var reqMapLink = String(reqRow[SITE_REQUEST_COL.MAP_LINK] || "").trim();
+    if (!reqMapLink) continue; // Auto-approval requires submitted map link
+
+    var mapLat = parseFloat(reqRow[SITE_REQUEST_COL.MAP_LATITUDE]);
+    var mapLng = parseFloat(reqRow[SITE_REQUEST_COL.MAP_LONGITUDE]);
+    if (!isFiniteNumberValue(mapLat) || !isFiniteNumberValue(mapLng)) {
+      var mapValidation = validateMapLinkDistance(reqMapLink, reqLat, reqLng, AUTO_APPROVAL_MAX_DISTANCE_METERS);
+      if (!mapValidation.success) continue;
+      mapLat = mapValidation.lat;
+      mapLng = mapValidation.lng;
+      reqSheet.getRange(k + 1, SITE_REQUEST_COL.MAP_LATITUDE + 1).setValue(mapLat);
+      reqSheet.getRange(k + 1, SITE_REQUEST_COL.MAP_LONGITUDE + 1).setValue(mapLng);
+    } else {
+      var reqToLinkDistance = getDistance(reqLat, reqLng, mapLat, mapLng);
+      if (reqToLinkDistance > AUTO_APPROVAL_MAX_DISTANCE_METERS) continue;
+    }
+
+    var autoApprovedAt = now.toISOString();
+    var currentNote = String(reqRow[SITE_REQUEST_COL.NOTE] || "");
+    var autoNote = currentNote + (currentNote ? " | " : "") + "[AUTO APPROVED after 2 minutes, within 700m]";
+
+    reqSheet.getRange(k + 1, SITE_REQUEST_COL.STATUS + 1).setValue("approved_today");
+    reqSheet.getRange(k + 1, SITE_REQUEST_COL.TEMP_RADIUS + 1).setValue(AUTO_APPROVAL_MAX_DISTANCE_METERS);
+    reqSheet.getRange(k + 1, SITE_REQUEST_COL.APPROVED_AT + 1).setValue(autoApprovedAt);
+    reqSheet.getRange(k + 1, SITE_REQUEST_COL.NOTE + 1).setValue(autoNote);
+    reqSheet.getRange(k + 1, SITE_REQUEST_COL.AUTO_META + 1).setValue(AUTO_APPROVAL_META);
+
+    return {
+      id: reqRow[SITE_REQUEST_COL.ID],
+      name: reqRow[SITE_REQUEST_COL.SUGGESTED_NAME],
+      transportPrice: toNumberSafe(reqRow[SITE_REQUEST_COL.TRANSPORT_PRICE], 120)
+    };
+  }
+
+
   throw new Error("أنت خارج نطاق جميع مواقع العمل المسجلة.");
 }
 
@@ -668,6 +917,10 @@ function doGet(e) {
             receiptName: String(r[SITE_REQUEST_COL.RECEIPT_NAME] || ""),
             tempRadius: toNumberSafe(r[SITE_REQUEST_COL.TEMP_RADIUS], 100),
             approvedAt: r[SITE_REQUEST_COL.APPROVED_AT] || "",
+            mapLatitude: toNumberSafe(r[SITE_REQUEST_COL.MAP_LATITUDE], null),
+            mapLongitude: toNumberSafe(r[SITE_REQUEST_COL.MAP_LONGITUDE], null),
+            autoMeta: String(r[SITE_REQUEST_COL.AUTO_META] || ""),
+            isAutoApproved: String(r[SITE_REQUEST_COL.AUTO_META] || "") === AUTO_APPROVAL_META,
             isActiveToday: isApprovedTodayRequestActive(r)
           };
         })
@@ -783,44 +1036,13 @@ function doPost(e) {
            throw new Error("رمز التحقق غير صحيح أو منتهي الصلاحية");
        }
     }
-    // Resolve Short Google Maps Links (Smart Extraction)
-    else if (data.action === "resolveMapLink") {
-        try {
-            // 1. Follow redirects manually up to 3 times to get the deep URL
-            var url = data.link;
-            for(var i=0; i<3; i++) {
-               var res = UrlFetchApp.fetch(url, { followRedirects: false, muteHttpExceptions: true });
-               var loc = res.getHeaders()['Location'] || res.getHeaders()['location'];
-               if(loc) { url = loc; } else { break; }
-            }
 
-            var lat = null, lng = null;
-            // 2. Try to extract from URL (@lat,lng or center=lat,lng)
-            var urlMatch = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/) || 
-                           url.match(/center=(-?\d+\.\d+)(?:%2C|,)(-?\d+\.\d+)/) ||
-                           url.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/); // Common data pattern
-            
-            if (urlMatch) {
-                lat = urlMatch[1]; lng = urlMatch[2];
-            } else {
-                // 3. Last resort: Fetch HTML and look for APP_INITIALIZATION_STATE
-                var htmlRes = UrlFetchApp.fetch(url).getContentText();
-                // Pattern for coordinates inside JSON-like structures in Maps source
-                var htmlMatch = htmlRes.match(/\[null,null,(-?\d+\.\d+),(-?\d+\.\d+)\]/) ||
-                                htmlRes.match(/\[\[null,null,(-?\d+\.\d+),(-?\d+\.\d+)\]/);
-                if (htmlMatch) { lat = htmlMatch[1]; lng = htmlMatch[2]; }
-            }
-            
-            // Validation: Google HQ in USA is ~37.4, -122. If we get something near that for Egypt URLs, it's a fallback error.
-            if (lat && Math.abs(parseFloat(lat) - 37.42) < 0.1 && Math.abs(parseFloat(lng) + 122.08) < 0.1) {
-                lat = null; lng = null; // Ignore Google HQ coordinate fallback
-            }
-
-            return json({ success: true, url: url, lat: lat, lng: lng });
-        } catch(e) {
-            return json({ success: false, message: e.toString() });
-        }
+    // Resolve Google Maps links
+    if (data.action === "resolveMapLink") {
+      var mapResult = resolveMapLinkData(data.link);
+      return json(mapResult);
     }
+
 
     // ADD EMPLOYEE
     if (data.action === "saveEmployee") {
@@ -938,7 +1160,42 @@ function doPost(e) {
       var s = getSiteRequestsSheet();
       var requestId = "REQ" + Math.floor(10000 + Math.random() * 90000);
       var note = String(data.note || "").trim();
-      var attachment = buildReceiptAttachment(data.receiptImage, requestId, data.employeeId);
+      var attachment = null;
+      var attachmentWarning = "";
+      if (data.receiptImage) {
+        try {
+          attachment = buildReceiptAttachment(data.receiptImage, requestId, data.employeeId);
+        } catch (attachmentError) {
+          var attachmentMsg = String((attachmentError && attachmentError.message) ? attachmentError.message : attachmentError);
+          if (/DriveApp|auth\/drive|Google Drive|permission|access denied/i.test(attachmentMsg)) {
+            attachmentWarning = "Request submitted without receipt attachment because Google Drive permissions are not enabled.";
+          } else {
+            throw attachmentError;
+          }
+        }
+      }
+      var mapLink = String(data.mapLink || "").trim();
+      var mapLatitude = "";
+      var mapLongitude = "";
+      var noteToStore = note;
+      if (attachmentWarning) {
+        noteToStore = note ? (note + "\n" + attachmentWarning) : attachmentWarning;
+      }
+
+      if (mapLink) {
+        var linkValidation = validateMapLinkDistance(
+          mapLink,
+          data.latitude,
+          data.longitude,
+          AUTO_APPROVAL_MAX_DISTANCE_METERS
+        );
+        if (!linkValidation.success) {
+          throw new Error(linkValidation.message);
+        }
+        mapLink = linkValidation.url || mapLink;
+        mapLatitude = linkValidation.lat;
+        mapLongitude = linkValidation.lng;
+      }
 
       s.appendRow([
         requestId,
@@ -947,17 +1204,24 @@ function doPost(e) {
         data.latitude,
         data.longitude,
         data.suggestedName,
-        data.mapLink || "",
+        mapLink,
         "pending",
         new Date().toISOString(),
         120,
-        note,
+        noteToStore,
         attachment ? attachment.url : "",
         attachment ? attachment.name : "",
         "",
+        "",
+        mapLatitude,
+        mapLongitude,
         ""
       ]);
-      return json({ success: true, message: "تم إرسال طلب تسجيل الموقع بنجاح، بانتظار موافقة الإدارة." });
+      var submitMessage = "Site request submitted successfully. If HR does not respond within 2 minutes, a temporary one-day approval may activate after distance checks.";
+      if (attachmentWarning) {
+        submitMessage += " " + attachmentWarning;
+      }
+      return json({ success: true, message: submitMessage, attachmentSaved: !!attachment });
     }
 
     if (data.action === "approveSiteRequest") {
@@ -984,10 +1248,12 @@ function doPost(e) {
             ]);
             reqSheet.getRange(i + 1, SITE_REQUEST_COL.STATUS + 1).setValue("approved");
             reqSheet.getRange(i + 1, SITE_REQUEST_COL.TEMP_RADIUS + 1).setValue("");
+            reqSheet.getRange(i + 1, SITE_REQUEST_COL.AUTO_META + 1).setValue("");
           } else {
             // Approve for today only
             reqSheet.getRange(i + 1, SITE_REQUEST_COL.STATUS + 1).setValue("approved_today");
             reqSheet.getRange(i + 1, SITE_REQUEST_COL.TEMP_RADIUS + 1).setValue(approvedRadius);
+            reqSheet.getRange(i + 1, SITE_REQUEST_COL.AUTO_META + 1).setValue("");
           }
           
           reqSheet.getRange(i + 1, SITE_REQUEST_COL.TRANSPORT_PRICE + 1).setValue(approvedRequestTransport);
@@ -1004,8 +1270,26 @@ function doPost(e) {
       var rows = s.getDataRange().getValues();
       for (var i = 1; i < rows.length; i++) {
         if (String(rows[i][SITE_REQUEST_COL.ID]) === String(data.id)) {
+          var currentStatus = String(rows[i][SITE_REQUEST_COL.STATUS] || "");
+          var canceledAttendanceCount = 0;
+
+          if (currentStatus === "approved_today") {
+            canceledAttendanceCount = deleteAttendanceForTemporaryRequestDay(rows[i]);
+          }
+
           s.getRange(i + 1, SITE_REQUEST_COL.STATUS + 1).setValue("rejected");
-          return json({ success: true, message: "تم رفض الطلب." });
+          s.getRange(i + 1, SITE_REQUEST_COL.TEMP_RADIUS + 1).setValue("");
+
+          var rejectionMessage = "تم رفض الطلب.";
+          if (currentStatus === "approved_today") {
+            if (canceledAttendanceCount > 0) {
+              rejectionMessage += " تم إلغاء " + canceledAttendanceCount + " سجل/سجلات حضور من يوم الموافقة.";
+            } else {
+              rejectionMessage += " لم يتم العثور على حضور مسجل لنفس اليوم.";
+            }
+          }
+
+          return json({ success: true, message: rejectionMessage, canceledAttendanceCount: canceledAttendanceCount });
         }
       }
       throw new Error("الطلب غير موجود");
@@ -1419,10 +1703,18 @@ function getSettingsObject() {
 /////////////////////////////
 function initializePermissions() {
   // Touching these services forces GAS to ask for authorization
-  DriveApp.getRootFolder();
-  GmailApp.getAliases();
-  SpreadsheetApp.getActive();
-  console.log("✅ All permissions requested. Please follow the popup instructions.");
+  try {
+    DriveApp.getRootFolder();
+    DriveApp.getStorageUsed();
+    GmailApp.getAliases();
+    SpreadsheetApp.getActive();
+    UrlFetchApp.getRequest("https://www.google.com");
+    console.log("✅ All permissions requested. Please follow the popup instructions.");
+    return "تم تفعيل كافة الصلاحيات بنجاح.";
+  } catch(e) {
+    console.error(e);
+    return "فشل تفعيل الصلاحيات: " + e.toString();
+  }
 }
 
 function getAttendanceInRange(start, end) {

@@ -509,7 +509,7 @@ async function submitSiteRequest() {
 
     document.getElementById('loader').classList.remove('hidden');
     
-    // Validate that the link matches the current location (within 1000m)
+    // Validate that the link matches the current location (within 700m)
     if (link) {
         try {
             const res = await fetch(API_URL, {
@@ -518,9 +518,9 @@ async function submitSiteRequest() {
             const result = await res.json();
             if (result.success && result.lat && result.lng) {
                 const dist = getDistanceFromLatLonInM(lastLocation.lat, lastLocation.lng, parseFloat(result.lat), parseFloat(result.lng));
-                if (dist > 1000) {
+                if (dist > 700) {
                     document.getElementById('loader').classList.add('hidden');
-                    return alert(`❌ خطأ: الرابط يشير لمكان يبعد عنك ${(dist/1000).toFixed(2)} كم. يجب أن يكون الرابط لمكانك الحالي (بحد أقصى 1000 متر).`);
+                    return alert(`❌ خطأ: الرابط يشير لمكان يبعد عنك ${(dist/1000).toFixed(2)} كم. يجب أن يكون الرابط لمكانك الحالي (بحد أقصى 700 متر).`);
                 }
             }
         } catch(e) { console.warn("Failed to validate link distance", e); }
@@ -722,3 +722,4 @@ function renderMyReports(data, monthStr) {
     document.getElementById('empTotalHours').innerText = totalHours.toFixed(2);
     document.getElementById('empTotalTransport').innerText = totalTransport.toFixed(2) + " ج.م";
 }
+
