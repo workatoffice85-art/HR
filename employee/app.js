@@ -465,47 +465,18 @@ function openRequestModal() {
     document.getElementById('suggestedSiteName').value = '';
     document.getElementById('suggestedSiteLink').value = '';
     document.getElementById('suggestedSiteNote').value = '';
-    document.getElementById('suggestedSiteReceipt').value = '';
 }
 
 function closeRequestModal() {
     document.getElementById('requestSiteModal').classList.add('hidden');
 }
 
-function fileToDataUrl(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = () => reject(new Error('فشل قراءة الملف'));
-        reader.readAsDataURL(file);
-    });
-}
-
 async function submitSiteRequest() {
     const name = document.getElementById('suggestedSiteName').value.trim();
     const link = document.getElementById('suggestedSiteLink').value.trim();
     const note = document.getElementById('suggestedSiteNote').value.trim();
-    const receiptFile = document.getElementById('suggestedSiteReceipt').files[0];
     if (!name) return alert("يرجى إدخال اسم الموقع");
     if (!lastLocation) return alert("يجب توفير إحداثيات الموقع");
-
-    if (receiptFile && receiptFile.size > 5 * 1024 * 1024) {
-        return alert("حجم الصورة كبير جدًا. الحد الأقصى 5MB.");
-    }
-
-    let receiptImage = null;
-    if (receiptFile) {
-        try {
-            const dataUrl = await fileToDataUrl(receiptFile);
-            receiptImage = {
-                name: receiptFile.name || 'receipt.jpg',
-                type: receiptFile.type || 'image/jpeg',
-                dataUrl: dataUrl
-            };
-        } catch (error) {
-            return alert("فشل تجهيز الصورة للإرسال: " + error.message);
-        }
-    }
 
     document.getElementById('loader').classList.remove('hidden');
     
@@ -534,8 +505,7 @@ async function submitSiteRequest() {
         longitude: lastLocation.lng,
         suggestedName: name,
         mapLink: link,
-        note: note,
-        receiptImage: receiptImage
+        note: note
     };
     try {
         const res = await fetch(API_URL, {

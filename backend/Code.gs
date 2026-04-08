@@ -296,61 +296,6 @@ function deleteAttendanceForTemporaryRequestDay(requestRow) {
   return deletedCount;
 }
 
-function getSiteRequestAttachmentFolder() {
-  var folderName = "HR_SiteRequest_Attachments";
-  try {
-    var existing = DriveApp.getFoldersByName(folderName);
-    if (existing.hasNext()) return existing.next();
-    return DriveApp.createFolder(folderName);
-  } catch (e) {
-    throw new Error("خطأ في صلاحيات Google Drive: " + e.toString() + ". يجب التأكد من أن المشرف قام بتفعيل الصلاحيات من لوحة التحكم أو إعادة نشر التطبيق بخيار (Execute as: Me).");
-  }
-}
-
-function buildReceiptAttachment(data, requestId, employeeId) {
-  if (!data || typeof data !== "object") return null;
-
-  var rawDataUrl = String(data.dataUrl || "");
-  var rawBase64 = String(data.base64 || "");
-  var mimeType = String(data.type || "application/octet-stream");
-  var fileName = String(data.name || ("receipt_" + requestId + ".jpg"));
-
-  if (rawDataUrl && rawDataUrl.indexOf("base64,") !== -1) {
-    var parts = rawDataUrl.split("base64,");
-    rawBase64 = parts[1] || "";
-    var mimeMatch = String(parts[0] || "").match(/^data:([^;]+);base64$/);
-    if (mimeMatch && mimeMatch[1]) mimeType = mimeMatch[1];
-  }
-
-  if (!rawBase64) return null;
-  if (rawBase64.length > 8 * 1024 * 1024) {
-    throw new Error("Attachment is too large. Maximum allowed size is 5MB.");
-  }
-
-  var fileExt = "";
-  if (mimeType.indexOf("image/") === 0) {
-    fileExt = "." + mimeType.replace("image/", "").replace(/[^\w]/g, "");
-  }
-  if (!fileExt) fileExt = ".jpg";
-
-  var normalizedName = fileName.replace(/[\\/:*?\"<>|]/g, "_");
-  if (!/\.[a-zA-Z0-9]{2,5}$/.test(normalizedName)) {
-    normalizedName += fileExt;
-  }
-
-  var bytes = Utilities.base64Decode(rawBase64);
-  var blob = Utilities.newBlob(bytes, mimeType, normalizedName);
-  var folder = getSiteRequestAttachmentFolder();
-  var file = folder.createFile(blob);
-  file.setName("req_" + requestId + "_emp_" + employeeId + "_" + file.getName());
-  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-
-  return {
-    url: file.getUrl(),
-    name: file.getName()
-  };
-}
-
 /////////////////////////////
 // 🔥 DISTANCE
 /////////////////////////////
@@ -1160,27 +1105,9 @@ function doPost(e) {
       var s = getSiteRequestsSheet();
       var requestId = "REQ" + Math.floor(10000 + Math.random() * 90000);
       var note = String(data.note || "").trim();
-      var attachment = null;
-      var attachmentWarning = "";
-      if (data.receiptImage) {
-        try {
-          attachment = buildReceiptAttachment(data.receiptImage, requestId, data.employeeId);
-        } catch (attachmentError) {
-          var attachmentMsg = String((attachmentError && attachmentError.message) ? attachmentError.message : attachmentError);
-          if (/DriveApp|auth\/drive|Google Drive|permission|access denied/i.test(attachmentMsg)) {
-            attachmentWarning = "Request submitted without receipt attachment because Google Drive permissions are not enabled.";
-          } else {
-            throw attachmentError;
-          }
-        }
-      }
       var mapLink = String(data.mapLink || "").trim();
       var mapLatitude = "";
       var mapLongitude = "";
-      var noteToStore = note;
-      if (attachmentWarning) {
-        noteToStore = note ? (note + "\n" + attachmentWarning) : attachmentWarning;
-      }
 
       if (mapLink) {
         var linkValidation = validateMapLinkDistance(
@@ -1208,9 +1135,9 @@ function doPost(e) {
         "pending",
         new Date().toISOString(),
         120,
-        noteToStore,
-        attachment ? attachment.url : "",
-        attachment ? attachment.name : "",
+        note,
+        "",
+        "",
         "",
         "",
         mapLatitude,
@@ -1218,10 +1145,7 @@ function doPost(e) {
         ""
       ]);
       var submitMessage = "Site request submitted successfully. If HR does not respond within 2 minutes, a temporary one-day approval may activate after distance checks.";
-      if (attachmentWarning) {
-        submitMessage += " " + attachmentWarning;
-      }
-      return json({ success: true, message: submitMessage, attachmentSaved: !!attachment });
+      return json({ success: true, message: submitMessage, attachmentSaved: false });
     }
 
     if (data.action === "approveSiteRequest") {
