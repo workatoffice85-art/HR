@@ -887,9 +887,22 @@ function doGet(e) {
 
       var records = d.map(function(r) {
         var transport = resolveTransportPrice(r[10], r[0], r[2], transportContext);
+        var rawHours = r[9];
+        var hoursNum = 0;
+        
+        // Handle cases where Google Sheets might return a Date object for a number-like string
+        if (Object.prototype.toString.call(rawHours) === "[object Date]") {
+          // If it's a date, it might be a corrupted entry or misformatted cell
+          // We'll try to treat it as a number if possible, or just 0 if it looks like a real date
+          hoursNum = 0; 
+        } else {
+          hoursNum = toNumberSafe(rawHours, 0);
+        }
+
         return {
           employeeId:r[0], employeeName:r[1], siteId:r[2], siteName:r[3],
-          checkIn:r[4], checkOut:r[5], latitude:r[6], longitude:r[7], status:r[8], totalHours:r[9], transportPrice:transport
+          checkIn:r[4], checkOut:r[5], latitude:r[6], longitude:r[7], status:r[8], 
+          totalHours:hoursNum, transportPrice:transport
         };
       });
       

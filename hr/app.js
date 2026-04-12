@@ -166,7 +166,7 @@ function renderAttendanceTable(data) {
                 <td data-label="الموقع">${record.siteName}</td>
                 <td data-label="وقت الحضور" dir="ltr">${checkInTime}</td>
                 <td data-label="وقت الانصراف" dir="ltr">${checkOutTime}</td>
-                <td data-label="إجمالي الساعات">${record.totalHours ? record.totalHours + ' ساعات' : '-'}</td>
+                <td data-label="إجمالي الساعات">${record.totalHours && !isNaN(parseFloat(record.totalHours)) ? parseFloat(record.totalHours).toFixed(2) + ' ساعات' : '-'}</td>
                 <td data-label="بدل الانتقال">${record.transportPrice || 0} ج.م</td>
                 <td data-label="الحالة"><span style="color:${statusColor}">${statusText}</span></td>
             </tr>
@@ -630,7 +630,6 @@ async function fetchEmployees() {
                     <td data-label="البريد">${record.email}</td>
                     <td data-label="الهاتف">${record.phone || '-'}</td>
                     <td data-label="الصلاحية">${record.role}</td>
-                    <td data-label="البدل">${record.transportPrice || 0} ج.م</td>
                     <td data-label="البصمة">${record.faceDescriptor ? '✅ مسجل' : '❌ لا يوجد'}</td>
                     <td data-label="الإجراءات" style="display:flex; gap:8px; justify-content:center; padding:10px;">
                         <button class="btn-primary" style="padding:5px 12px; font-size:0.85rem; width:auto;" onclick="editEmployee('${record.id}')">تعديل ✏️</button>
@@ -673,7 +672,6 @@ async function fetchSites() {
                     <td data-label="خط العرض">${record.latitude}</td>
                     <td data-label="خط الطول">${record.longitude}</td>
                     <td data-label="النطاق">${record.radius} متر</td>
-                    <td data-label="البدل">${record.transportPrice || 0} ج.م</td>
                     <td data-label="الإجراءات" style="display:flex; gap:8px; justify-content:center; padding:10px;">
                         ${actions}
                     </td>
@@ -722,8 +720,12 @@ function editSite(id) {
     document.getElementById('siteLat').value = site.latitude;
     document.getElementById('siteLng').value = site.longitude;
     document.getElementById('siteRadius').value = site.radius;
-    document.getElementById('siteTransportPrice').value = site.transportPrice || 120;
     openSiteModal();
+}
+
+function toggleAdvancedEmpOptions() {
+    const el = document.getElementById('advancedEmpOptions');
+    el.classList.toggle('hidden');
 }
 
 async function deleteEntity(action, id, name) {
@@ -753,6 +755,7 @@ async function openEmployeeModal(mode = 'add', emp = null) {
         document.getElementById('empRole').value = 'employee';
         document.getElementById('empTransportPrice').value = 0;
         document.getElementById('empSites').value = '';
+        document.getElementById('advancedEmpOptions').classList.add('hidden');
     }
 
     // Render Sites List
@@ -977,8 +980,7 @@ async function saveSite() {
     const payload = {
         action: editId ? 'updateSite' : 'saveSite',
         id: editId || Math.floor(10000 + Math.random() * 90000), 
-        name: name, latitude: lat, longitude: lng, radius: radius,
-        transportPrice: document.getElementById('siteTransportPrice').value || 120
+        name: name, latitude: lat, longitude: lng, radius: radius
     };
     
     document.getElementById('loader').classList.remove('hidden');
