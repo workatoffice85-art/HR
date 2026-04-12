@@ -6,7 +6,9 @@ let lastDetection = null;
 let sitesData = [];
 let faceMatcher = null;
 let currentFaceDescriptor = null;
-let timerInterval = null; // Added for live counter // Stored during video match
+let timerInterval = null; 
+let isFaceVerified = false;
+let lastDetectedSite = null;
 let tempEmail = ""; // used during registration
 let tempPhone = ""; // used during registration
 const MODEL_URL = '../models';
@@ -299,6 +301,21 @@ function setAppState(state, startTime) {
         timerContainer.classList.add('hidden');
         stopWorkTimer();
     }
+    updateActionButtonsState();
+}
+
+function updateActionButtonsState() {
+    const btnIn = document.getElementById('btnCheckIn');
+    const btnOut = document.getElementById('btnCheckOut');
+    
+    const shouldBeEnabled = isFaceVerified && lastDetectedSite;
+    
+    if (btnIn && btnIn.disabled !== !shouldBeEnabled) {
+        btnIn.disabled = !shouldBeEnabled;
+    }
+    if (btnOut && btnOut.disabled !== !shouldBeEnabled) {
+        btnOut.disabled = !shouldBeEnabled;
+    }
 }
 
 function startWorkTimer(startTime) {
@@ -357,23 +374,21 @@ function startVideo() {
                 faceapi.draw.drawDetections(canvas, resizeDetections);
                 
                 const bestMatch = faceMatcher.findBestMatch(detections.descriptor);
-                if (bestMatch.label !== 'unknown' && lastLocation) {
+                if (bestMatch.label !== 'unknown') {
                     setStatus('تم التحقق من الوجه بنجاح ✓', 'success-text');
                     currentFaceDescriptor = Array.from(detections.descriptor);
-                    document.getElementById('btnCheckIn').disabled = false;
-                    document.getElementById('btnCheckOut').disabled = false;
-                } else if(bestMatch.label === 'unknown') {
+                    isFaceVerified = true;
+                } else {
                     setStatus('الوجه غير متطابق', 'error-text');
                     currentFaceDescriptor = null;
-                    document.getElementById('btnCheckIn').disabled = true;
-                    document.getElementById('btnCheckOut').disabled = true;
+                    isFaceVerified = false;
                 }
             } else {
-                setStatus('وجه الكاميرا إاليك', 'text-muted');
+                setStatus('وجه الكاميرا إليك', 'text-muted');
                 currentFaceDescriptor = null;
-                document.getElementById('btnCheckIn').disabled = true;
-                document.getElementById('btnCheckOut').disabled = true;
+                isFaceVerified = false;
             }
+            updateActionButtonsState();
         }, 1000);
     });
 }
@@ -415,17 +430,14 @@ function verifyLocation() {
     if (detectedSite) {
         document.getElementById('siteText').innerText = `✅ أنت في موقع: ${detectedSite.name}`;
         document.getElementById('btnRequestSite').classList.add('hidden');
-        if(currentFaceDescriptor) {
-            document.getElementById('btnCheckIn').disabled = false;
-            document.getElementById('btnCheckOut').disabled = false;
-        }
+        lastDetectedSite = detectedSite;
     } else {
         const distText = minDistance === Infinity ? "" : `(أقرب موقع لك هو ${closestSiteName} ويبعد ${(minDistance/1000).toFixed(2)} كم)`;
         document.getElementById('siteText').innerText = `❌ أنت خارج النطاق. ${distText}`;
         document.getElementById('btnRequestSite').classList.remove('hidden');
-        document.getElementById('btnCheckIn').disabled = true;
-        document.getElementById('btnCheckOut').disabled = true;
+        lastDetectedSite = null;
     }
+    updateActionButtonsState();
 }
 
 function getDistanceFromLatLonInM(lat1, lon1, lat2, lon2) {

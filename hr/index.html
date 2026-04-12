@@ -278,7 +278,10 @@
             <div id="tab-siteRequests" class="tab-content hidden">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
                     <h2>طلبات تسجيل المواقع الجديدة</h2>
-                    <button class="btn-primary" style="width:auto; padding:8px 15px;" onclick="refreshData()">تحديث مجمع 🔄</button>
+                    <div style="display:flex; gap:10px;">
+                        <button class="btn-primary" style="width:auto; padding:8px 15px; background:var(--danger);" onclick="clearProcessedRequests()">مسح الطلبات المنتهية 🗑️</button>
+                        <button class="btn-primary" style="width:auto; padding:8px 15px;" onclick="refreshData()">تحديث مجمع 🔄</button>
+                    </div>
                 </div>
                 <div class="table-container">
                     <table>

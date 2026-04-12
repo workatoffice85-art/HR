@@ -1045,6 +1045,25 @@ function doPost(e) {
         return json({success:false, message: "خطأ في إرسال التقرير التفصيلي: " + e.toString()});
       }
     }
+
+    if (action === "clearProcessedRequests") {
+      var s = getSiteRequestsSheet();
+      var rows = s.getDataRange().getValues();
+      var deletedCount = 0;
+      var todayKey = getTodayKey();
+      
+      for (var i = rows.length - 1; i >= 1; i--) {
+        var status = String(rows[i][SITE_REQUEST_COL.STATUS] || "");
+        var approvedAt = rows[i][SITE_REQUEST_COL.APPROVED_AT] || rows[i][SITE_REQUEST_COL.CREATED_AT];
+        var isOldToday = (status === "approved_today" && toDateKey(approvedAt) !== todayKey);
+        
+        if (status === "approved" || status === "rejected" || isOldToday) {
+          s.deleteRow(i + 1);
+          deletedCount++;
+        }
+      }
+      return json({ success: true, message: "تم مسح " + deletedCount + " طلب تمت معالجته بنجاح." });
+    }
     
     // LOGIN
     if (action === "login") {

@@ -1287,3 +1287,22 @@ async function rejectRequest(id) {
     document.getElementById('loader').classList.add('hidden');
 }
 
+async function clearProcessedRequests() {
+    if(!confirm("هل أنت متأكد من مسح جميع الطلبات التي تمت الموافقة عليها أو رفضها أو انتهت صلاحتها؟ هذا الإجراء لا يمكن التراجع عنه.")) return;
+
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'clearProcessedRequests' }),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const result = await res.json();
+        if(result.success) {
+            alert(result.message);
+            await initDashboard(true); // Refresh all data to sync
+        } else alert("خطأ: " + result.message);
+    } catch(e) { console.error(e); alert("خطأ في الاتصال"); }
+    document.getElementById('loader').classList.add('hidden');
+}
+
