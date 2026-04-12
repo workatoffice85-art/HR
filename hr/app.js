@@ -730,6 +730,7 @@ function renderSitesTable(data) {
             <td data-label="خط العرض">${record.latitude}</td>
             <td data-label="خط الطول">${record.longitude}</td>
             <td data-label="النطاق">${record.radius} متر</td>
+            <td data-label="رابط الموقع">${record.mapLink ? `<a href="${record.mapLink}" target="_blank" style="color:var(--primary); text-decoration:underline;">فتح الرابط 📍</a>` : '-'}</td>
             <td data-label="الإجراءات" style="display:flex; gap:8px; justify-content:center; padding:10px;">
                 ${actions}
             </td>
@@ -769,7 +770,7 @@ function editSite(id) {
     document.getElementById('editSiteId').value = site.id;
     document.getElementById('siteModalTitle').innerText = 'تعديل بيانات الموقع';
     document.getElementById('siteName').value = site.name;
-    document.getElementById('siteMapLink').value = '';
+    document.getElementById('siteMapLink').value = site.mapLink || '';
     document.getElementById('siteLat').value = site.latitude;
     document.getElementById('siteLng').value = site.longitude;
     document.getElementById('siteRadius').value = site.radius;
@@ -1033,7 +1034,8 @@ async function saveSite() {
     const payload = {
         action: editId ? 'updateSite' : 'saveSite',
         id: editId || Math.floor(10000 + Math.random() * 90000), 
-        name: name, latitude: lat, longitude: lng, radius: radius
+        name: name, latitude: lat, longitude: lng, radius: radius,
+        mapLink: document.getElementById('siteMapLink').value.trim()
     };
     
     document.getElementById('loader').classList.remove('hidden');

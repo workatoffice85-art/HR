@@ -474,7 +474,7 @@ function ensureEmployeeContactsUnique(rows, email, phone, ignoreEmployeeId) {
 }
 
 function getSiteTransportMap() {
-  var sheet = getOrCreateSheet("sites", ["id","name","latitude","longitude","radius","transportPrice"]);
+  var sheet = getOrCreateSheet("sites", ["id","name","latitude","longitude","radius","transportPrice","mapLink"]);
   var rows = sheet.getDataRange().getValues();
   var map = {};
   for (var i = 1; i < rows.length; i++) {
@@ -671,7 +671,7 @@ function validateAll(ss, data) {
   if (!data.latitude || !data.longitude) throw new Error("يجب توفير إحداثيات الموقع (GPS)");
 
   var sitesSheet = getOrCreateSheet("sites",
-    ["id","name","latitude","longitude","radius","transportPrice"]
+    ["id","name","latitude","longitude","radius","transportPrice","mapLink"]
   );
 
   var sites = sitesSheet.getDataRange().getValues();
@@ -837,7 +837,7 @@ function doGet(e) {
 
     if (action === "getSites") {
       var sitesSheet = getOrCreateSheet("sites",
-        ["id","name","latitude","longitude","radius","transportPrice"]
+        ["id","name","latitude","longitude","radius","transportPrice","mapLink"]
       );
       var employeeFilter = String(e.parameter.employeeId || "");
       var sitesRows = sitesSheet.getDataRange().getValues();
@@ -851,6 +851,7 @@ function doGet(e) {
           longitude: parseFloat(r[3]),
           radius: toNumberSafe(r[4], 20),
           transportPrice: toNumberSafe(r[5], 0),
+          mapLink: r[6] || "",
           isTemporary: false
         };
       });
@@ -1180,12 +1181,13 @@ function doPost(e) {
     // ADD SITE
     if (data.action === "saveSite") {
       var s = getOrCreateSheet("sites",
-        ["id","name","latitude","longitude","radius","transportPrice"]
+        ["id","name","latitude","longitude","radius","transportPrice","mapLink"]
       );
 
       s.appendRow([
         data.id,data.name,
-        data.latitude,data.longitude,data.radius,toNumberSafe(data.transportPrice, 0)
+        data.latitude,data.longitude,data.radius,toNumberSafe(data.transportPrice, 0),
+        data.mapLink || ""
       ]);
 
       return json({success:true, message: "تم إضافة الموقع بنجاح"});
@@ -1193,11 +1195,11 @@ function doPost(e) {
 
     // UPDATE SITE
     if (data.action === "updateSite") {
-      var s = getOrCreateSheet("sites", ["id","name","latitude","longitude","radius","transportPrice"]);
+      var s = getOrCreateSheet("sites", ["id","name","latitude","longitude","radius","transportPrice","mapLink"]);
       var rows = s.getDataRange().getValues();
       for (var i = 1; i < rows.length; i++) {
         if (String(rows[i][0]) === String(data.id)) {
-          s.getRange(i + 1, 2, 1, 5).setValues([[data.name, data.latitude, data.longitude, data.radius, data.transportPrice]]);
+          s.getRange(i + 1, 2, 1, 6).setValues([[data.name, data.latitude, data.longitude, data.radius, data.transportPrice, data.mapLink || ""]]);
           return json({success:true, message: "تم تحديث الموقع بنجاح"});
         }
       }
@@ -1206,7 +1208,7 @@ function doPost(e) {
 
     // DELETE SITE
     if (data.action === "deleteSite") {
-      var s = getOrCreateSheet("sites", ["id","name","latitude","longitude","radius"]);
+      var s = getOrCreateSheet("sites", ["id","name","latitude","longitude","radius","transportPrice","mapLink"]);
       var rows = s.getDataRange().getValues();
       for (var i = 1; i < rows.length; i++) {
         if (String(rows[i][0]) === String(data.id)) {
@@ -2023,7 +2025,7 @@ function _getEmployeesData(ss) {
 }
 
 function _getSitesData(ss, employeeId) {
-  var sitesSheet = getOrCreateSheet("sites", ["id","name","latitude","longitude","radius","transportPrice"]);
+  var sitesSheet = getOrCreateSheet("sites", ["id","name","latitude","longitude","radius","transportPrice","mapLink"]);
   var sitesRows = sitesSheet.getDataRange().getValues();
   sitesRows.shift();
   var siteData = sitesRows.map(function(r) {
@@ -2034,6 +2036,7 @@ function _getSitesData(ss, employeeId) {
       longitude: parseFloat(r[3]),
       radius: toNumberSafe(r[4], 20),
       transportPrice: toNumberSafe(r[5], 0),
+      mapLink: r[6] || "",
       isTemporary: false
     };
   });
