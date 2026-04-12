@@ -77,16 +77,15 @@ function logout() {
 
 function showTab(tabName) {
     document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
-    document.querySelectorAll('.nav-link').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
     
     const targetTab = document.getElementById('tab-' + tabName);
     if (targetTab) targetTab.classList.remove('hidden');
     
-    // Highlight the active nav link
-    document.querySelectorAll('.nav-link').forEach(link => {
-        const onclickAttr = link.getAttribute('onclick');
-        if (onclickAttr && onclickAttr.includes(`'${tabName}'`)) {
-            link.classList.add('active');
+    // Highlight the active nav button
+    document.querySelectorAll('.nav-btn').forEach(btn => {
+        if (btn.getAttribute('onclick')?.includes(`'${tabName}'`)) {
+            btn.classList.add('active');
         }
     });
 
@@ -99,12 +98,6 @@ function showTab(tabName) {
     if (tabName === 'reports') generateReport();
     if (tabName === 'employeeDetails') initEmployeeDetailedTab();
     if (tabName === 'settings') fetchSettings();
-
-    // Close sidebar on mobile after clicking a link
-    const sidebar = document.querySelector('.sidebar');
-    if (window.innerWidth <= 768 && sidebar && sidebar.classList.contains('active')) {
-        toggleSidebar();
-    }
 }
 
 async function initDashboard() {
@@ -129,7 +122,6 @@ function renderAttendanceTable(data) {
     const tbody = document.getElementById('attendanceTableBody');
     tbody.innerHTML = '';
     
-    // Filter by date if selected
     let filtered = data;
     if (filterDate) {
         filtered = data.filter(record => {
@@ -138,40 +130,47 @@ function renderAttendanceTable(data) {
         });
     }
 
-    // Reverse to show newest first
+    let presentToday = 0;
+    let lateToday = 0;
+
     [...filtered].reverse().forEach(record => {
         const cInObj = new Date(record.checkIn);
-        const checkInTime = !isNaN(cInObj) ? cInObj.toLocaleString('ar-EG') : (record.checkIn || '-');
+        const checkInTime = !isNaN(cInObj) ? cInObj.toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'}) : '-';
         
-        let checkOutTime = 'لم ينصرف بعد';
+        let checkOutTime = 'نشط';
         if (record.checkOut) {
             const cOutObj = new Date(record.checkOut);
-            checkOutTime = !isNaN(cOutObj) ? cOutObj.toLocaleString('ar-EG') : (record.checkOut || '-');
-        }
-        
-        let statusText = 'حاضر';
-        let statusColor = 'var(--secondary)';
-        
-        if (record.status === 'late') {
-            statusText = 'متأخر';
-            statusColor = 'var(--danger)';
-        } else if (record.status === 'overtime') {
-            statusText = 'عمل إضافي';
-            statusColor = '#3b82f6';
+            checkOutTime = !isNaN(cOutObj) ? cOutObj.toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'}) : '-';
         }
 
+        presentToday++;
+        if (record.status === 'late') lateToday++;
+        
+        const statusMeta = getStatusMeta(record.status);
+        const statusClass = record.status === 'late' ? 'bg-error/10 text-error' : (record.status === 'overtime' ? 'bg-primary/10 text-primary' : 'bg-secondary/10 text-secondary');
+
         tbody.innerHTML += `
-            <tr>
-                <td data-label="الموظف">${record.employeeName}</td>
-                <td data-label="الموقع">${record.siteName}</td>
-                <td data-label="وقت الحضور" dir="ltr">${checkInTime}</td>
-                <td data-label="وقت الانصراف" dir="ltr">${checkOutTime}</td>
-                <td data-label="إجمالي الساعات">${record.totalHours && !isNaN(parseFloat(record.totalHours)) ? parseFloat(record.totalHours).toFixed(2) + ' ساعات' : '-'}</td>
-                <td data-label="بدل الانتقال">${record.transportPrice || 0} ج.م</td>
-                <td data-label="الحالة"><span style="color:${statusColor}">${statusText}</span></td>
+            <tr class="hover:bg-surface-container/50 transition-colors group">
+                <td class="px-6 py-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center text-[10px] font-black">${record.employeeName.substring(0,2)}</div>
+                        <span class="font-bold text-sm">${record.employeeName}</span>
+                    </div>
+                </td>
+                <td class="px-6 py-4 text-sm text-on-surface-variant">${record.siteName}</td>
+                <td class="px-6 py-4 text-sm font-bold" dir="ltr">${checkInTime}</td>
+                <td class="px-6 py-4 text-sm text-on-surface-variant font-medium" dir="ltr">${checkOutTime}</td>
+                <td class="px-6 py-4 text-sm font-black text-primary">${record.totalHours && !isNaN(parseFloat(record.totalHours)) ? parseFloat(record.totalHours).toFixed(2) : '-'}</td>
+                <td class="px-6 py-4 text-sm font-bold">${record.transportPrice || 0} ج.م</td>
+                <td class="px-6 py-4">
+                    <span class="status-pill ${statusClass}">${statusMeta.text}</span>
+                </td>
             </tr>
         `;
     });
+
+    if (document.getElementById('statPresentToday')) document.getElementById('statPresentToday').innerText = presentToday;
+    if (document.getElementById('statLateToday')) document.getElementById('statLateToday').innerText = lateToday;
 }
 
 function getWorkingDaysCount(startDate, endDate) {
@@ -216,9 +215,9 @@ function calculateUniqueDailyTransport(records) {
 }
 
 function getStatusMeta(status) {
-    if (status === 'late') return { text: 'متأخر', color: 'var(--danger)' };
-    if (status === 'overtime') return { text: 'عمل إضافي', color: '#3b82f6' };
-    return { text: 'حاضر', color: 'var(--secondary)' };
+    if (status === 'late') return { text: 'متأخر', color: '#ffb4ab' };
+    if (status === 'overtime') return { text: 'إضافي', color: '#adc6ff' };
+    return { text: 'حاضر', color: '#b7c8e1' };
 }
 
 function resetEmployeeDetailedReportView(message) {
@@ -354,7 +353,7 @@ async function generateEmployeeDetailedReport() {
             ? checkInObj.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })
             : (record.checkIn || '-');
 
-        let checkOutText = 'لم ينصرف بعد';
+        let checkOutText = 'نشط';
         if (record.checkOut) {
             const checkOutObj = new Date(record.checkOut);
             checkOutText = !isNaN(checkOutObj)
@@ -363,20 +362,21 @@ async function generateEmployeeDetailedReport() {
         }
 
         const statusMeta = getStatusMeta(record.status);
+        const statusClass = record.status === 'late' ? 'bg-error/10 text-error' : (record.status === 'overtime' ? 'bg-primary/10 text-primary' : 'bg-secondary/10 text-secondary');
         const parsedHours = parseFloat(record.totalHours);
-        const hoursText = !isNaN(parsedHours) ? `${parsedHours.toFixed(2)} ساعة` : '-';
+        const hoursText = !isNaN(parsedHours) ? `${parsedHours.toFixed(2)}` : '-';
         const parsedTransport = parseFloat(record.transportPrice || 0);
         const transportText = `${isNaN(parsedTransport) ? 0 : parsedTransport.toFixed(2)} ج.م`;
 
         tbody.innerHTML += `
-            <tr>
-                <td data-label="التاريخ">${dateText}</td>
-                <td data-label="الموقع">${record.siteName || '-'}</td>
-                <td data-label="وقت الحضور" dir="ltr">${checkInText}</td>
-                <td data-label="وقت الانصراف" dir="ltr">${checkOutText}</td>
-                <td data-label="الحالة"><span style="color:${statusMeta.color}">${statusMeta.text}</span></td>
-                <td data-label="الساعات">${hoursText}</td>
-                <td data-label="البدل">${transportText}</td>
+            <tr class="hover:bg-surface-container/30 transition-colors">
+                <td class="px-6 py-4 text-sm font-bold text-on-surface">${dateText}</td>
+                <td class="px-6 py-4 text-sm text-on-surface-variant">${record.siteName || '-'}</td>
+                <td class="px-6 py-4 text-sm font-medium" dir="ltr">${checkInText}</td>
+                <td class="px-6 py-4 text-sm font-medium text-on-surface-variant" dir="ltr">${checkOutText}</td>
+                <td class="px-6 py-4 text-center"><span class="status-pill ${statusClass}">${statusMeta.text}</span></td>
+                <td class="px-6 py-4 text-sm font-black text-primary">${hoursText}</td>
+                <td class="px-6 py-4 text-sm font-bold">${transportText}</td>
             </tr>
         `;
     });
@@ -519,15 +519,15 @@ function generateReport() {
         lates.push(data.lates);
 
         tbody.innerHTML += `
-            <tr>
-                <td data-label="ID الموظف">${empId}</td>
-                <td data-label="اسم الموظف">${data.name}</td>
-                <td data-label="أيام الحضور">${data.daysPresent} أيام</td>
-                <td data-label="أيام الغياب"><span style="color:${absentDays > 0 ? 'var(--danger)' : 'inherit'}">${absentDays > 0 ? absentDays : 0} أيام</span></td>
-                <td data-label="التأخير"><span style="color:${data.lates > 0 ? 'var(--danger)' : 'inherit'}">${data.lates} مرات</span></td>
-                <td data-label="العمل الإضافي"><span style="color:#3b82f6">${data.overtime || 0} أيام</span></td>
-                <td data-label="بدل الانتقال">${data.totalTransport.toFixed(2)} ج.م</td>
-                <td data-label="إجمالي الساعات">${data.totalHours.toFixed(2)} ساعات</td>
+            <tr class="hover:bg-surface-container/30 transition-colors">
+                <td class="px-6 py-4 text-xs font-black text-on-surface-variant uppercase">${empId}</td>
+                <td class="px-6 py-4 font-bold text-on-surface">${data.name}</td>
+                <td class="px-6 py-4 text-sm font-bold text-primary">${data.daysPresent} يوم</td>
+                <td class="px-6 py-4 text-sm font-bold ${absentDays > 0 ? 'text-error' : 'text-on-surface-variant'}">${absentDays > 0 ? absentDays : 0} يوم</td>
+                <td class="px-6 py-4 text-sm font-bold ${data.lates > 0 ? 'text-tertiary' : 'text-on-surface-variant'}">${data.lates} مرة</td>
+                <td class="px-6 py-4 text-sm font-bold text-on-surface-variant">${data.overtime || 0}</td>
+                <td class="px-6 py-4 text-sm font-black text-on-surface">${data.totalTransport.toFixed(2)} ج.م</td>
+                <td class="px-6 py-4 text-sm font-black text-primary animate-pulse">${data.totalHours.toFixed(2)}</td>
             </tr>
         `;
     }
@@ -571,8 +571,8 @@ function updateCharts(labels, hoursData, latesData) {
     if(hoursChartInstance) hoursChartInstance.destroy();
     if(latesChartInstance) latesChartInstance.destroy();
 
-    Chart.defaults.color = '#94a3b8';
-    Chart.defaults.font.family = 'Tajawal';
+    Chart.defaults.color = '#c3c5d9';
+    Chart.defaults.font.family = 'Noto Kufi Arabic, Inter';
 
     hoursChartInstance = new Chart(ctxHours, {
         type: 'bar',
@@ -581,15 +581,21 @@ function updateCharts(labels, hoursData, latesData) {
             datasets: [{
                 label: 'إجمالي الساعات',
                 data: hoursData,
-                backgroundColor: 'rgba(79, 70, 229, 0.7)',
-                borderColor: 'rgba(79, 70, 229, 1)',
-                borderWidth: 1,
-                borderRadius: 4
+                backgroundColor: 'rgba(0, 98, 208, 0.7)',
+                borderColor: '#adc6ff',
+                borderWidth: 2,
+                borderRadius: 8,
+                hoverBackgroundColor: '#adc6ff'
             }]
         },
         options: {
             responsive: true,
-            plugins: { title: { display: true, text: 'ساعات العمل لكل موظف' } }
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { grid: { color: 'rgba(255,255,255,0.05)' }, border: { display: false } },
+                x: { grid: { display: false }, border: { display: false } }
+            }
         }
     });
 
@@ -598,17 +604,20 @@ function updateCharts(labels, hoursData, latesData) {
         data: {
             labels: labels,
             datasets: [{
-                label: 'مرات التأخير',
                 data: latesData,
-                backgroundColor: [
-                    '#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6', '#d946ef'
-                ],
-                borderWidth: 0
+                backgroundColor: ['#adc6ff', '#ffb4a1', '#b7c8e1', '#d3e4fe', '#ffdbd2'],
+                borderWidth: 4,
+                borderColor: '#171f33',
+                hoverOffset: 12
             }]
         },
         options: {
             responsive: true,
-            plugins: { title: { display: true, text: 'نسبة التأخير بين الموظفين' } }
+            maintainAspectRatio: false,
+            cutout: '70%',
+            plugins: {
+                legend: { position: 'bottom', labels: { usePointStyle: true, padding: 20 } }
+            }
         }
     });
 }
@@ -625,15 +634,22 @@ async function fetchEmployees() {
             tbody.innerHTML = '';
             result.data.forEach(record => {
                 const row = document.createElement('tr');
+                row.className = "hover:bg-surface-container/30 transition-colors";
                 row.innerHTML = `
-                    <td data-label="الاسم">${record.name}</td>
-                    <td data-label="البريد">${record.email}</td>
-                    <td data-label="الهاتف">${record.phone || '-'}</td>
-                    <td data-label="الصلاحية">${record.role}</td>
-                    <td data-label="البصمة">${record.faceDescriptor ? '✅ مسجل' : '❌ لا يوجد'}</td>
-                    <td data-label="الإجراءات" style="display:flex; gap:8px; justify-content:center; padding:10px;">
-                        <button class="btn-primary" style="padding:5px 12px; font-size:0.85rem; width:auto;" onclick="editEmployee('${record.id}')">تعديل ✏️</button>
-                        <button class="btn-danger" style="padding:5px 12px; font-size:0.85rem; width:auto; background:rgba(239,68,68,0.1); border:1px solid var(--danger); color:var(--danger);" onclick="deleteEntity('deleteEmployee', '${record.id}', '${record.name}')">حذف 🗑️</button>
+                    <td class="px-6 py-4">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary">${record.name.substring(0,1)}</div>
+                            <span class="font-bold text-on-surface">${record.name}</span>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 text-sm text-on-surface-variant">${record.email}</td>
+                    <td class="px-6 py-4 text-sm text-on-surface-variant">${record.phone || '-'}</td>
+                    <td class="px-6 py-4"><span class="px-3 py-1 bg-surface-container-high rounded-full text-[10px] font-black uppercase text-on-surface-variant">${record.role}</span></td>
+                    <td class="px-6 py-4">
+                        <div class="flex items-center justify-center gap-2">
+                            <button class="p-2 hover:bg-primary/10 text-primary rounded-xl transition-colors" onclick="editEmployee('${record.id}')"><span class="material-symbols-outlined">edit</span></button>
+                            <button class="p-2 hover:bg-error/10 text-error rounded-xl transition-colors" onclick="deleteEntity('deleteEmployee', '${record.id}', '${record.name}')"><span class="material-symbols-outlined">delete</span></button>
+                        </div>
                     </td>
                 `;
                 tbody.appendChild(row);
@@ -655,25 +671,24 @@ async function fetchSites() {
             const tbody = document.getElementById('sitesTableBody');
             tbody.innerHTML = '';
             result.data.forEach(record => {
-                console.log("Rendering site record:", record);
                 const isTemporary = Boolean(record.isTemporary);
-                const siteName = isTemporary
-                    ? `${record.name} <small style="color:#f59e0b;">(مؤقت - اليوم فقط)</small>`
-                    : record.name;
-                const actions = isTemporary
-                    ? '<span style="color:var(--text-muted);">-</span>'
-                    : `
-                        <button class="btn-primary" style="padding:5px 12px; font-size:0.85rem; width:auto;" onclick="editSite('${record.id}')">تعديل ✏️</button>
-                        <button class="btn-danger" style="padding:5px 12px; font-size:0.85rem; width:auto; background:rgba(239,68,68,0.1); border:1px solid var(--danger); color:var(--danger);" onclick="deleteEntity('deleteSite', '${record.id}', '${record.name}')">حذف 🗑️</button>
-                    `;
                 const row = document.createElement('tr');
+                row.className = "hover:bg-surface-container/30 transition-colors";
                 row.innerHTML = `
-                    <td data-label="اسم الموقع">${siteName}</td>
-                    <td data-label="خط العرض">${record.latitude}</td>
-                    <td data-label="خط الطول">${record.longitude}</td>
-                    <td data-label="النطاق">${record.radius} متر</td>
-                    <td data-label="الإجراءات" style="display:flex; gap:8px; justify-content:center; padding:10px;">
-                        ${actions}
+                    <td class="px-6 py-4">
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-lg bg-secondary/10 flex items-center justify-center text-secondary"><span class="material-symbols-outlined text-sm">location_on</span></div>
+                            <span class="font-bold text-on-surface">${record.name} ${isTemporary ? '<span class="text-[10px] text-tertiary">(مؤقت)</span>' : ''}</span>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 text-xs font-mono text-on-surface-variant">${record.latitude}</td>
+                    <td class="px-6 py-4 text-xs font-mono text-on-surface-variant">${record.longitude}</td>
+                    <td class="px-6 py-4 text-sm font-black text-secondary">${record.radius}م</td>
+                    <td class="px-6 py-4">
+                        <div class="flex items-center justify-center gap-2">
+                            ${!isTemporary ? `<button class="p-2 hover:bg-primary/10 text-primary rounded-xl" onclick="editSite('${record.id}')"><span class="material-symbols-outlined">edit</span></button>
+                            <button class="p-2 hover:bg-error/10 text-error rounded-xl" onclick="deleteEntity('deleteSite', '${record.id}', '${record.name}')"><span class="material-symbols-outlined">delete</span></button>` : '-'}
+                        </div>
                     </td>
                 `;
                 tbody.appendChild(row);
@@ -1108,52 +1123,42 @@ function renderSiteRequestsTable(data) {
     const tbody = document.getElementById('siteRequestsTableBody');
     tbody.innerHTML = '';
     [...data].reverse().forEach(req => {
-        let statusText = 'قيد الانتظار';
-        let statusColor = 'var(--warning)';
+        let statusText = 'انتظار';
+        let statusClass = 'bg-primary-container/10 text-primary';
 
         if (req.status === 'approved') {
-            statusText = 'تمت الموافقة (دائم)';
-            statusColor = 'var(--secondary)';
+            statusText = 'دائم';
+            statusClass = 'bg-secondary/10 text-secondary';
         } else if (req.status === 'approved_today') {
-            statusText = req.isActiveToday ? 'موافقة اليوم فقط (نشط)' : 'موافقة اليوم فقط (انتهت)';
-            statusColor = req.isActiveToday ? '#22c55e' : 'var(--text-muted)';
+            statusText = req.isActiveToday ? 'نشط اليوم' : 'منتهي';
+            statusClass = req.isActiveToday ? 'bg-primary/10 text-primary' : 'bg-surface-container-highest text-on-surface-variant';
         } else if (req.status === 'rejected') {
             statusText = 'مرفوض';
-            statusColor = 'var(--danger)';
+            statusClass = 'bg-error/10 text-error';
         }
 
         const actions = req.status === 'pending' ? `
-            <div style="display:flex; gap:8px;">
-                <button class="btn-primary" style="padding:5px 12px; font-size:0.85rem; width:auto; background:var(--secondary);" onclick="approveRequest('${req.id}', '${req.suggestedName}')">موافقة ✓</button>
-                <button class="btn-danger" style="padding:5px 12px; font-size:0.85rem; width:auto;" onclick="rejectRequest('${req.id}')">رفض ✕</button>
+            <div class="flex items-center justify-center gap-2">
+                <button class="px-3 py-1.5 bg-secondary text-on-secondary text-[10px] font-black rounded-lg shadow-sm" onclick="approveRequest('${req.id}', '${req.suggestedName}')">موافقة</button>
+                <button class="px-3 py-1.5 bg-error text-on-error text-[10px] font-black rounded-lg shadow-sm" onclick="rejectRequest('${req.id}')">رفض</button>
             </div>
         ` : '-';
 
-        const mapLinkHtml = req.mapLink
-            ? `<a href="${req.mapLink}" target="_blank" style="color:var(--primary); text-decoration:underline;">فتح الرابط 📍</a>`
-            : 'لا يوجد';
-        const noteText = (req.note || '').trim() || '-';
-        const receiptHtml = req.receiptUrl
-            ? `<a href="${req.receiptUrl}" target="_blank" style="color:var(--secondary); text-decoration:underline;">${req.receiptName || 'عرض المرفق'}</a>`
-            : '-';
-
         const dateObj = req.timestamp ? new Date(req.timestamp) : null;
-        const createdStr = (dateObj && !isNaN(dateObj)) ? dateObj.toLocaleString('ar-EG') : (req.timestamp || '-');
-        const approvedObj = req.approvedAt ? new Date(req.approvedAt) : null;
-        const approvedStr = (approvedObj && !isNaN(approvedObj)) ? approvedObj.toLocaleString('ar-EG') : '';
-        const dateStr = approvedStr ? `${createdStr}<br><small style="color:var(--text-muted);">اعتماد: ${approvedStr}</small>` : createdStr;
+        const createdStr = (dateObj && !isNaN(dateObj)) ? dateObj.toLocaleDateString('ar-EG') : '-';
 
         tbody.innerHTML += `
-            <tr>
-                <td data-label="الموظف">${req.employeeName}</td>
-                <td data-label="اسم الموقع المقترح">${req.suggestedName}</td>
-                <td data-label="رابط الخريطة">${mapLinkHtml}</td>
-                <td data-label="ملاحظة الانتقالات">${noteText}</td>
-                <td data-label="مرفق">${receiptHtml}</td>
-                <td data-label="الإحداثيات" dir="ltr">${req.latitude}, ${req.longitude}</td>
-                <td data-label="التاريخ">${dateStr}</td>
-                <td data-label="الحالة"><span style="color:${statusColor}">${statusText}</span></td>
-                <td data-label="الإجراءات">${actions}</td>
+            <tr class="hover:bg-surface-container/30 transition-colors">
+                <td class="px-6 py-4 font-bold text-sm">${req.employeeName}</td>
+                <td class="px-6 py-4 text-sm font-medium">
+                    <div class="flex flex-col">
+                        <span>${req.suggestedName}</span>
+                        ${req.mapLink ? `<a href="${req.mapLink}" target="_blank" class="text-[10px] text-primary hover:underline">موقع الخريطة 📍</a>` : ''}
+                    </div>
+                </td>
+                <td class="px-6 py-4 text-xs text-on-surface-variant font-medium">${createdStr}</td>
+                <td class="px-6 py-4"><span class="status-pill ${statusClass}">${statusText}</span></td>
+                <td class="px-6 py-4 text-center">${actions}</td>
             </tr>
         `;
     });
