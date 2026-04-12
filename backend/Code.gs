@@ -888,21 +888,23 @@ function doGet(e) {
       var records = d.map(function(r) {
         var transport = resolveTransportPrice(r[10], r[0], r[2], transportContext);
         var rawHours = r[9];
-        var hoursNum = 0;
+        var hoursNum = toNumberSafe(rawHours, null);
         
-        // Handle cases where Google Sheets might return a Date object for a number-like string
-        if (Object.prototype.toString.call(rawHours) === "[object Date]") {
-          // If it's a date, it might be a corrupted entry or misformatted cell
-          // We'll try to treat it as a number if possible, or just 0 if it looks like a real date
-          hoursNum = 0; 
-        } else {
-          hoursNum = toNumberSafe(rawHours, 0);
+        // If hours are missing or invalid but user has checked out, calculate on the fly
+        if ((hoursNum === null || hoursNum === 0) && r[4] && r[5]) {
+          try {
+             var cIn = new Date(r[4]);
+             var cOut = new Date(r[5]);
+             if (!isNaN(cIn.getTime()) && !isNaN(cOut.getTime())) {
+               hoursNum = parseFloat(((cOut - cIn) / 36e5).toFixed(2));
+             }
+          } catch(e) { hoursNum = 0; }
         }
 
         return {
           employeeId:r[0], employeeName:r[1], siteId:r[2], siteName:r[3],
           checkIn:r[4], checkOut:r[5], latitude:r[6], longitude:r[7], status:r[8], 
-          totalHours:hoursNum, transportPrice:transport
+          totalHours: hoursNum || 0, transportPrice:transport
         };
       });
       
