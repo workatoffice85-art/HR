@@ -16,18 +16,8 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function showSection(id) {
-    // Hide all sections that are immediate children of body or the main container
-    const sections = ['loginSection', 'otpSection', 'verifyOTPSection', 'registrationSection', 'dashboardSection', 'myReportsSection'];
-    sections.forEach(secId => {
-        const el = document.getElementById(secId);
-        if (el) el.classList.add('hidden');
-    });
-    
-    const target = document.getElementById(id);
-    if (target) {
-        target.classList.remove('hidden');
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
+    document.querySelectorAll('.glass-card').forEach(el => el.classList.add('hidden'));
+    document.getElementById(id).classList.remove('hidden');
 }
 
 function checkSession() {
@@ -36,11 +26,6 @@ function checkSession() {
         currentUser = JSON.parse(userJson);
         showSection('dashboardSection');
         document.getElementById('welcomeText').innerText = `مرحباً ${currentUser.name}`;
-        
-        // Set Avatar
-        const avatar = document.getElementById('empAvatar');
-        if (avatar) avatar.innerText = currentUser.name.substring(0, 2).toUpperCase();
-        
         initSystem();
     } else {
         showSection('loginSection');
@@ -146,15 +131,11 @@ async function captureFaceRegistration() {
     const detections = await faceapi.detectSingleFace(video, options).withFaceLandmarks().withFaceDescriptor();
     if(detections) {
         registeredFaceDescriptor = Array.from(detections.descriptor);
-        const msg = document.getElementById('regStatusMessage');
-        msg.innerText = 'تم التقاط البصمة بنجاح ✓';
-        msg.className = 'text-center text-xs font-bold text-primary animate-pulse';
-        msg.classList.remove('hidden');
+        document.getElementById('regStatusMessage').innerText = 'تم التقاط البصمة بنجاح ✓';
+        document.getElementById('regStatusMessage').className = 'success-text';
     } else {
-        const msg = document.getElementById('regStatusMessage');
-        msg.innerText = 'لم يتم التعرف على وجه للأسف، دقق في الإضاءة.';
-        msg.className = 'text-center text-xs font-bold text-error';
-        msg.classList.remove('hidden');
+        document.getElementById('regStatusMessage').innerText = 'لم يتم التعرف على وجه للأسف، دقق في الإضاءة.';
+        document.getElementById('regStatusMessage').className = 'error-text';
     }
 }
 
@@ -262,14 +243,12 @@ async function checkCurrentStatus() {
             const lastRecord = result.data[result.data.length - 1];
             const isCheckedIn = (lastRecord.checkIn && !lastRecord.checkOut);
             
+            // Check if check-in was today (to avoid keeping old open sessions from yesterday)
             const checkInDate = new Date(lastRecord.checkIn).toDateString();
             const today = new Date().toDateString();
 
             if (isCheckedIn && checkInDate === today) {
                 setAppState('in', lastRecord.checkIn);
-                
-                // If already checked in, show status
-                setStatus('حالتك الحالية: مسجل حضور ✅', 'text-center p-4 bg-primary/10 text-primary font-bold rounded-2xl text-sm border border-primary/20');
             } else {
                 setAppState('out');
             }
@@ -278,7 +257,7 @@ async function checkCurrentStatus() {
         }
     } catch(e) {
         console.error("Status check failed", e);
-        setAppState('out');
+        setAppState('out'); // Fallback to check-in
     }
 }
 
@@ -329,14 +308,7 @@ function stopWorkTimer() {
 
 function setStatus(msg, className) {
     const el = document.getElementById('statusMessage');
-    if(el) { 
-        el.innerText = msg; 
-        // If className is one of our special ones, map it to Tailwind
-        if (className === 'success-text') el.className = 'text-center p-4 bg-primary/10 text-primary font-bold rounded-2xl text-sm border border-primary/20';
-        else if (className === 'error-text') el.className = 'text-center p-4 bg-error/10 text-error font-bold rounded-2xl text-sm border border-error/20';
-        else if (className === 'text-muted') el.className = 'text-center p-4 bg-surface-container text-on-surface-variant font-bold rounded-2xl text-sm border border-outline-variant/10';
-        else el.className = className;
-    }
+    if(el) { el.innerText = msg; el.className = className; }
 }
 
 function startVideo() {
@@ -419,19 +391,15 @@ function verifyLocation() {
     }
 
     if (detectedSite) {
-        document.getElementById('siteText').innerText = `📍 موقع العمل: ${detectedSite.name}`;
-        document.getElementById('gpsText').innerText = 'داخل النطاق';
-        document.getElementById('gpsDot').className = 'w-2 h-2 rounded-full bg-primary animate-pulse';
+        document.getElementById('siteText').innerText = `✅ أنت في موقع: ${detectedSite.name}`;
         document.getElementById('btnRequestSite').classList.add('hidden');
         if(currentFaceDescriptor) {
             document.getElementById('btnCheckIn').disabled = false;
             document.getElementById('btnCheckOut').disabled = false;
         }
     } else {
-        const distText = minDistance === Infinity ? "" : `(تبعد ${(minDistance/1000).toFixed(2)} كم عن ${closestSiteName})`;
-        document.getElementById('siteText').innerText = `خارج النطاق المسموح ${distText}`;
-        document.getElementById('gpsText').innerText = 'خارج النطاق';
-        document.getElementById('gpsDot').className = 'w-2 h-2 rounded-full bg-error animate-ping';
+        const distText = minDistance === Infinity ? "" : `(أقرب موقع لك هو ${closestSiteName} ويبعد ${(minDistance/1000).toFixed(2)} كم)`;
+        document.getElementById('siteText').innerText = `❌ أنت خارج النطاق. ${distText}`;
         document.getElementById('btnRequestSite').classList.remove('hidden');
         document.getElementById('btnCheckIn').disabled = true;
         document.getElementById('btnCheckOut').disabled = true;
@@ -684,28 +652,33 @@ function renderMyReports(data, monthStr) {
     // 4. Render to Table
     fullReport.forEach(item => {
         if (item.type === 'entry') {
-            const statusMeta = getStatusMeta(item.status);
-            const statusClass = item.status === 'late' ? 'bg-error/10 text-error' : (item.status === 'overtime' ? 'bg-primary/10 text-primary' : 'bg-secondary/10 text-secondary');
+            let statusText = 'حاضر';
+            let statusColor = 'var(--secondary)';
+            
+            if (item.status === 'late') {
+                statusText = 'متأخر';
+                statusColor = 'var(--danger)';
+            } else if (item.status === 'overtime') {
+                statusText = 'عمل إضافي';
+                statusColor = '#3b82f6'; // Bright Blue
+            }
 
             tbody.innerHTML += `
-                <tr class="hover:bg-surface-container/30 transition-colors">
-                    <td class="px-6 py-4 font-bold text-sm text-on-surface">${item.date.toLocaleDateString('ar-EG')}</td>
-                    <td class="px-6 py-4 text-xs font-bold text-on-surface-variant" dir="ltr">${new Date(item.checkIn).toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'})}</td>
-                    <td class="px-6 py-4 text-xs font-bold text-on-surface-variant" dir="ltr">${item.checkOut ? new Date(item.checkOut).toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'}) : '-'}</td>
-                    <td class="px-6 py-4 text-sm font-black text-primary">${item.transport} ج.م</td>
-                    <td class="px-6 py-4">
-                        <span class="status-pill ${statusClass}">${statusMeta.text}</span>
-                    </td>
+                <tr>
+                    <td data-label="التاريخ">${item.date.toLocaleDateString('ar-EG')}</td>
+                    <td data-label="الحضور" dir="ltr">${new Date(item.checkIn).toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'})}</td>
+                    <td data-label="الانصراف" dir="ltr">${item.checkOut ? new Date(item.checkOut).toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'}) : '-'}</td>
+                    <td data-label="البدل">${item.transport} ج.م</td>
+                    <td data-label="الحالة"><span style="color:${statusColor}">${statusText}</span></td>
                 </tr>
             `;
         } else {
+            // Absent Row
             tbody.innerHTML += `
-                <tr class="bg-error/5 group">
-                    <td class="px-6 py-4 font-bold text-sm text-error/60">${item.date.toLocaleDateString('ar-EG')}</td>
-                    <td colspan="3" class="px-6 py-4 text-center text-[10px] font-black uppercase tracking-widest text-error/40">غائب - لم يتم تسجيل حضور</td>
-                    <td class="px-6 py-4">
-                        <span class="status-pill bg-error/10 text-error">غائب</span>
-                    </td>
+                <tr style="background: rgba(239, 68, 68, 0.05);">
+                    <td data-label="التاريخ">${item.date.toLocaleDateString('ar-EG')}</td>
+                    <td data-label="التفاصيل" colspan="3" style="text-align:center !important; color:var(--danger); font-size:0.8rem;">غائب (لم يتم تسجيل حضور)</td>
+                    <td data-label="الحالة"><span style="color:var(--danger)">غائب</span></td>
                 </tr>
             `;
         }
@@ -713,16 +686,10 @@ function renderMyReports(data, monthStr) {
 
     const totalAbsent = workingDaysPassed.length - presentDates.size;
 
-    document.getElementById('empTotalPresent').innerText = presentDates.size; 
+    document.getElementById('empTotalPresent').innerText = presentDates.size; // Use size of unique dates set
     document.getElementById('empTotalAbsent').innerText = totalAbsent > 0 ? totalAbsent : 0;
     document.getElementById('empTotalLates').innerText = totalLates;
     document.getElementById('empTotalHours').innerText = totalHours.toFixed(2);
     document.getElementById('empTotalTransport').innerText = totalTransport.toFixed(2) + " ج.م";
-}
-
-function getStatusMeta(status) {
-    if (status === 'late') return { text: 'متأخر' };
-    if (status === 'overtime') return { text: 'إضافي' };
-    return { text: 'حاضر' };
 }
 
