@@ -505,11 +505,23 @@ function getRequestTransportMap() {
   return map;
 }
 
+function getSiteAllowancesMap() {
+  var sheet = getOrCreateSheet("siteAllowances", ["employeeId", "siteId", "allowancePrice"]);
+  var rows = sheet.getDataRange().getValues();
+  var map = {};
+  for (var i = 1; i < rows.length; i++) {
+    var key = String(rows[i][0]) + "_" + String(rows[i][1]);
+    map[key] = toNumberSafe(rows[i][2], 0);
+  }
+  return map;
+}
+
 function buildTransportContext() {
   return {
     siteMap: getSiteTransportMap(),
     employeeMap: getEmployeeTransportMap(),
-    requestMap: getRequestTransportMap()
+    requestMap: getRequestTransportMap(),
+    siteAllowanceMap: getSiteAllowancesMap()
   };
 }
 
@@ -522,6 +534,14 @@ function resolveTransportPrice(rawTransport, employeeId, siteId, context) {
   var normalizedSiteId = String(siteId || "");
   var normalizedEmployeeId = String(employeeId || "");
 
+  // 1. Highest Priority: Site-Specific Employee Allowance
+  if (context && context.siteAllowanceMap) {
+    var specificKey = normalizedEmployeeId + "_" + normalizedSiteId;
+    var specificPrice = toNumberSafe(context.siteAllowanceMap[specificKey], null);
+    if (specificPrice !== null && specificPrice > 0) return specificPrice;
+  }
+
+  // 2. Site Request Allowance
   if (isRequestSiteId(normalizedSiteId)) {
     var requestTransport = context && context.requestMap
       ? toNumberSafe(context.requestMap[normalizedSiteId], null)
@@ -529,13 +549,16 @@ function resolveTransportPrice(rawTransport, employeeId, siteId, context) {
     if (requestTransport !== null) return requestTransport;
   }
 
+  // 3. Employee Default Allowance
   var employeeTransport = context && context.employeeMap
     ? toNumberSafe(context.employeeMap[normalizedEmployeeId], null)
     : null;
-  if (employeeTransport !== null) return employeeTransport;
+  if (employeeTransport !== null && employeeTransport > 0) return employeeTransport;
 
-  if (attendanceTransport !== null) return attendanceTransport;
+  // 4. Attendance Record Value (Legacy/Manual)
+  if (attendanceTransport !== null && attendanceTransport > 0) return attendanceTransport;
 
+  // 5. Site Default Allowance
   var siteTransport = context && context.siteMap
     ? toNumberSafe(context.siteMap[normalizedSiteId], null)
     : null;
@@ -872,6 +895,22 @@ function doGet(e) {
       });
     }
 
+    if (action === "getSiteAllowances") {
+      var s = getOrCreateSheet("siteAllowances", ["employeeId", "siteId", "allowancePrice"]);
+      var d = s.getDataRange().getValues();
+      d.shift();
+      var filters = d;
+      if (e.parameter.employeeId) {
+        filters = d.filter(function(r) { return String(r[0]) === String(e.parameter.employeeId); });
+      }
+      return json({
+        success: true,
+        data: filters.map(function(r) {
+          return { employeeId: r[0], siteId: r[1], allowancePrice: toNumberSafe(r[2], 0) };
+        })
+      });
+    }
+
     return json({success:false,message:"Unknown action"});
 
   } catch(e){
@@ -1098,6 +1137,32 @@ function doPost(e) {
         }
       }
       return json({ success: true, message: "تم تحديث الإعدادات بنجاح" });
+    }
+
+    // SAVE SITE ALLOWANCES
+    if (data.action === "saveSiteAllowances") {
+      var s = getOrCreateSheet("siteAllowances", ["employeeId", "siteId", "allowancePrice"]);
+      var rows = s.getDataRange().getValues();
+      var empId = String(data.employeeId || "");
+      if (!empId) throw new Error("Employee ID is required");
+
+      // Remove existing for this employee
+      for (var i = rows.length - 1; i >= 1; i--) {
+        if (String(rows[i][0]) === empId) {
+          s.deleteRow(i + 1);
+        }
+      }
+
+      // Add new ones
+      if (data.allowances && Array.isArray(data.allowances)) {
+        data.allowances.forEach(function(item) {
+          if (item.siteId && toNumberSafe(item.allowancePrice, 0) > 0) {
+            s.appendRow([empId, item.siteId, toNumberSafe(item.allowancePrice, 0)]);
+          }
+        });
+      }
+
+      return json({ success: true, message: "تم تحديث بدلات المواقع بنجاح" });
     }
 
     // SITE REQUESTS
