@@ -483,6 +483,42 @@ function getSiteTransportMap() {
   return map;
 }
 
+function getSiteAllowancesForEmployee(employeeId) {
+  var sheet = getOrCreateSheet("siteAllowances", ["employeeId", "siteId", "transportPrice"]);
+  var rows = sheet.getDataRange().getValues();
+  var allowances = [];
+  var empIdStr = String(employeeId);
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === empIdStr) {
+      allowances.push({
+        siteId: String(rows[i][1]),
+        transportPrice: toNumberSafe(rows[i][2], 0)
+      });
+    }
+  }
+  return allowances;
+}
+
+function saveSiteAllowances(employeeId, allowances) {
+  var sheet = getOrCreateSheet("siteAllowances", ["employeeId", "siteId", "transportPrice"]);
+  var rows = sheet.getDataRange().getValues();
+  var empIdStr = String(employeeId);
+  
+  // Remove existing
+  for (var i = rows.length - 1; i >= 1; i--) {
+    if (String(rows[i][0]) === empIdStr) {
+      sheet.deleteRow(i + 1);
+    }
+  }
+  
+  // Add new
+  if (allowances && allowances.length) {
+    allowances.forEach(function(item) {
+      sheet.appendRow([empIdStr, item.siteId, toNumberSafe(item.transportPrice, 0)]);
+    });
+  }
+}
+
 function getEmployeeTransportMap() {
   var sheet = getOrCreateSheet("employees",
     ["id","name","email","password","phone","role","assignedSites","faceDescriptor","transportPrice"]
@@ -517,11 +553,28 @@ function isRequestSiteId(siteId) {
   return /^REQ/i.test(String(siteId || ""));
 }
 
+  var siteTransport = context && context.siteMap
+    ? toNumberSafe(context.siteMap[normalizedSiteId], null)
+    : null;
+  if (siteTransport !== null) return siteTransport;
+
+  return 0;
+}
+
 function resolveTransportPrice(rawTransport, employeeId, siteId, context) {
-  var attendanceTransport = toNumberSafe(rawTransport, null);
   var normalizedSiteId = String(siteId || "");
   var normalizedEmployeeId = String(employeeId || "");
 
+  // 1. Check Site Allowances Sheet (Custom mapping)
+  var allowanceSheet = getOrCreateSheet("siteAllowances", ["employeeId", "siteId", "transportPrice"]);
+  var allowanceRows = allowanceSheet.getDataRange().getValues();
+  for (var i = 1; i < allowanceRows.length; i++) {
+    if (String(allowanceRows[i][0]) === normalizedEmployeeId && String(allowanceRows[i][1]) === normalizedSiteId) {
+      return toNumberSafe(allowanceRows[i][2], 0);
+    }
+  }
+
+  // 2. Check Temporary site requests
   if (isRequestSiteId(normalizedSiteId)) {
     var requestTransport = context && context.requestMap
       ? toNumberSafe(context.requestMap[normalizedSiteId], null)
@@ -529,13 +582,13 @@ function resolveTransportPrice(rawTransport, employeeId, siteId, context) {
     if (requestTransport !== null) return requestTransport;
   }
 
+  // 3. Check Employee Default
   var employeeTransport = context && context.employeeMap
     ? toNumberSafe(context.employeeMap[normalizedEmployeeId], null)
     : null;
   if (employeeTransport !== null) return employeeTransport;
 
-  if (attendanceTransport !== null) return attendanceTransport;
-
+  // 4. Check Site Default
   var siteTransport = context && context.siteMap
     ? toNumberSafe(context.siteMap[normalizedSiteId], null)
     : null;
@@ -748,9 +801,20 @@ function doGet(e) {
 
       return json({
         success:true,
-        data:d.map(function(r) { return {
-          id:r[0], name:r[1], email:r[2], phone:r[4], role:r[5], assignedSites:r[6]?r[6].toString().split(','):[], faceDescriptor:r[7], transportPrice:toNumberSafe(r[8], 0)
-        };})
+        data:d.map(function(r) { 
+          var empId = r[0];
+          return {
+            id:empId, 
+            name:r[1], 
+            email:r[2], 
+            phone:r[4], 
+            role:r[5], 
+            assignedSites:r[6]?r[6].toString().split(','):[], 
+            faceDescriptor:r[7], 
+            transportPrice:toNumberSafe(r[8], 0),
+            siteAllowances: getSiteAllowancesForEmployee(empId)
+          };
+        })
       });
     }
 
@@ -773,6 +837,23 @@ function doGet(e) {
           isTemporary: false
         };
       });
+
+      // Filter by assigned sites if employeeFilter is provided
+      if (employeeFilter) {
+        var empSheet = getOrCreateSheet("employees", ["id","name","email","password","phone","role","assignedSites"]);
+        var empRows = empSheet.getDataRange().getValues();
+        var assignedStr = "";
+        for (var k = 1; k < empRows.length; k++) {
+          if (String(empRows[k][0]) === employeeFilter) {
+            assignedStr = String(empRows[k][6] || "");
+            break;
+          }
+        }
+        if (assignedStr) {
+          var assignedArray = assignedStr.split(',').map(function(s) { return s.trim(); });
+          siteData = siteData.filter(function(s) { return assignedArray.indexOf(s.id) !== -1; });
+        }
+      }
 
       var reqSheet = getSiteRequestsSheet();
       var reqRows = reqSheet.getDataRange().getValues();
@@ -1003,6 +1084,10 @@ function doPost(e) {
         normalizedContacts.phone,data.role,data.assignedSites,data.faceDescriptor,toNumberSafe(data.transportPrice, 0)
       ]);
 
+      if (data.siteAllowances) {
+        saveSiteAllowances(data.id, data.siteAllowances);
+      }
+
       return json({success:true, message: "تم حفظ بيانات الموظف بنجاح"});
     }
 
@@ -1019,6 +1104,11 @@ function doPost(e) {
           s.getRange(i + 1, 2, 1, 6).setValues([[data.name, normalizedContacts.email, finalPassword, normalizedContacts.phone, data.role, data.assignedSites]]);
           var normalizedEmployeeTransport = toNumberSafe(data.transportPrice, 0);
           s.getRange(i+1, 9).setValue(normalizedEmployeeTransport);
+          
+          if (data.siteAllowances) {
+            saveSiteAllowances(data.id, data.siteAllowances);
+          }
+          
           syncAttendanceTransportForEmployee(data.id, normalizedEmployeeTransport);
           return json({success:true, message: "تم تحديث بيانات الموظف بنجاح"});
         }

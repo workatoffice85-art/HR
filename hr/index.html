@@ -357,19 +357,23 @@
                 <input type="text" id="empPass">
             </div>
             <div class="input-group">
-                <label>معرف المواقع (مفصولة بفاصلة)</label>
-                <input type="text" id="empSites" placeholder="مثال: site1,site2">
+                <label>تحديد المواقع والبدلات المخصصة</label>
+                <div id="empSitesContainer" style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; max-height: 200px; overflow-y: auto; border: 1px solid var(--card-border);">
+                    <div style="color: var(--text-muted); font-size: 0.85rem; text-align: center;">جاري تحميل المواقع...</div>
+                </div>
+                <input type="hidden" id="empSites">
             </div>
             <div class="input-group">
-                <label>الدور</label>
+                <label>الصلاحية</label>
                 <select id="empRole">
                     <option value="employee">موظف (Employee)</option>
                     <option value="hr">إدارة (HR)</option>
                 </select>
             </div>
             <div class="input-group">
-                <label>سعر الانقال الافتراضي (ج.م)</label>
+                <label>سعر الانتقال الافتراضي (ج.م)</label>
                 <input type="number" id="empTransportPrice" value="0">
+                <small style="color: var(--text-muted);">يستخدم في حال عدم تحديد سعر مخصص للموقع أعلاه.</small>
             </div>
             
             <div style="display:flex; gap:10px;">

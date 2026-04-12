@@ -687,7 +687,7 @@ async function fetchSites() {
     document.getElementById('loader').classList.add('hidden');
 }
 
-function editEmployee(id) {
+async function editEmployee(id) {
     const emp = allEmployees.find(e => String(e.id) === String(id));
     if(!emp) return;
     document.getElementById('editEmpId').value = emp.id;
@@ -698,9 +698,14 @@ function editEmployee(id) {
     document.getElementById('empPass').value = ''; // Don't show password for security
     document.getElementById('empPass').placeholder = 'اتركها فارغة للاحتفاظ بكلمة المرور الحالية';
     document.getElementById('empRole').value = emp.role;
+    document.getElementById('empRole').value = emp.role;
     document.getElementById('empTransportPrice').value = emp.transportPrice || 0;
-    document.getElementById('empSites').value = Array.isArray(emp.assignedSites) ? emp.assignedSites.join(',') : emp.assignedSites;
-    openEmployeeModal('edit');
+    
+    // Assigned sites (can keep for compatibility or just use for initialization)
+    const assigned = Array.isArray(emp.assignedSites) ? emp.assignedSites : (emp.assignedSites ? String(emp.assignedSites).split(',') : []);
+    document.getElementById('empSites').value = assigned.join(',');
+    
+    await openEmployeeModal('edit', emp);
 }
 
 function editSite(id) {
@@ -736,7 +741,7 @@ async function deleteEntity(action, id, name) {
     document.getElementById('loader').classList.add('hidden');
 }
 
-function openEmployeeModal(mode = 'add') {
+async function openEmployeeModal(mode = 'add', emp = null) {
     if (mode !== 'edit') {
         document.getElementById('editEmpId').value = '';
         document.getElementById('empModalTitle').innerText = 'إضافة موظف جديد';
@@ -749,6 +754,54 @@ function openEmployeeModal(mode = 'add') {
         document.getElementById('empTransportPrice').value = 0;
         document.getElementById('empSites').value = '';
     }
+
+    // Render Sites List
+    const container = document.getElementById('empSitesContainer');
+    container.innerHTML = '<div style="color: var(--text-muted); font-size: 0.85rem; text-align: center;">جاري تحميل المواقع...</div>';
+    
+    if (!allSites.length) {
+        await fetchSites();
+    }
+
+    container.innerHTML = '';
+    allSites.filter(s => !s.isTemporary).forEach(site => {
+        const isAssigned = emp && emp.assignedSites && emp.assignedSites.includes(String(site.id));
+        const allowance = emp && emp.siteAllowances ? emp.siteAllowances.find(a => String(a.siteId) === String(site.id)) : null;
+        const price = allowance ? allowance.transportPrice : (site.transportPrice || 0);
+
+        const div = document.createElement('div');
+        div.style.display = 'flex';
+        div.style.alignItems = 'center';
+        div.style.gap = '10px';
+        div.style.marginBottom = '8px';
+        div.style.padding = '5px';
+        div.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
+
+        div.innerHTML = `
+            <input type="checkbox" class="site-checkbox" value="${site.id}" ${isAssigned ? 'checked' : ''} style="width:18px; height:18px;">
+            <span style="flex:1; font-size:0.9rem;">${site.name}</span>
+            <div style="display:flex; align-items:center; gap:5px;">
+                <input type="number" class="site-price-input" data-site-id="${site.id}" value="${price}" 
+                    style="width:70px; padding:4px; border-radius:4px; background:rgba(0,0,0,0.3); border:1px solid var(--card-border); color:white; font-size:0.85rem;"
+                    ${!isAssigned ? 'disabled' : ''}>
+                <span style="font-size:0.75rem; color:var(--text-muted);">ج.م</span>
+            </div>
+        `;
+
+        // Toggle price input based on checkbox
+        const checkbox = div.querySelector('.site-checkbox');
+        const priceInput = div.querySelector('.site-price-input');
+        checkbox.addEventListener('change', () => {
+            priceInput.disabled = !checkbox.checked;
+        });
+
+        container.appendChild(div);
+    });
+
+    if (!allSites.length) {
+        container.innerHTML = '<div style="color: var(--danger); font-size: 0.85rem; text-align: center;">لم يتم العثور على مواقع.</div>';
+    }
+
     document.getElementById('employeeModal').classList.remove('hidden');
 }
 function closeEmployeeModal() { document.getElementById('employeeModal').classList.add('hidden'); }
@@ -760,9 +813,23 @@ async function saveEmployee() {
     const phone = document.getElementById('empPhone').value.trim();
     const pass = document.getElementById('empPass').value.trim();
     const role = document.getElementById('empRole').value;
-    const sites = document.getElementById('empSites').value.trim();
-    if(!phone) return alert("أدخل رقم الهاتف");
     
+    // Collect sites and allowances
+    const selectedSites = [];
+    const siteAllowances = [];
+    
+    document.querySelectorAll('#empSitesContainer > div').forEach(div => {
+        const checkbox = div.querySelector('.site-checkbox');
+        const priceInput = div.querySelector('.site-price-input');
+        if (checkbox.checked) {
+            const siteId = checkbox.value;
+            const price = parseFloat(priceInput.value) || 0;
+            selectedSites.push(siteId);
+            siteAllowances.push({ siteId, transportPrice: price });
+        }
+    });
+
+    if(!phone) return alert("أدخل رقم الهاتف");
     if(!name || !email) return alert("أكمل البيانات");
     
     const autoGeneratedPassword = (!editId && !pass)
@@ -772,7 +839,13 @@ async function saveEmployee() {
     const payload = {
         action: editId ? 'updateEmployee' : 'saveEmployee',
         id: editId || ('EMP' + Math.floor(1000 + Math.random() * 9000)),
-        name: name, email: email, password: pass || autoGeneratedPassword, phone: phone, role: role, assignedSites: sites,
+        name: name, 
+        email: email, 
+        password: pass || autoGeneratedPassword, 
+        phone: phone, 
+        role: role, 
+        assignedSites: selectedSites.join(','),
+        siteAllowances: siteAllowances,
         transportPrice: document.getElementById('empTransportPrice').value || 0
     };
     
