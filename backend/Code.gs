@@ -855,20 +855,36 @@ function doGet(e) {
 
       for (var i = 0; i < reqRows.length; i++) {
         var req = reqRows[i];
-        if (!isApprovedTodayRequestActive(req)) continue;
+        var isApprovedToday = isApprovedTodayRequestActive(req);
+        
+        // 🚀 AUTO-APPROVAL VISIBILITY FIX:
+        // Also include pending requests that meet the auto-approval criteria
+        // so the employee can actually see the site and trigger the check-in.
+        var isAutoApprovable = false;
+        if (String(req[SITE_REQUEST_COL.STATUS]) === "pending" && employeeFilter && String(req[SITE_REQUEST_COL.EMPLOYEE_ID]) === employeeFilter) {
+          var createdAt = new Date(req[SITE_REQUEST_COL.CREATED_AT]);
+          var now = new Date();
+          if (!isNaN(createdAt.getTime()) && (now - createdAt >= AUTO_APPROVAL_WAIT_MS)) {
+             // Check distance if we have current location (approximated or just show it to let them try)
+             // We'll show it if it's old enough, and let validateAll handle the actual distance check.
+             isAutoApprovable = true;
+          }
+        }
+
+        if (!isApprovedToday && !isAutoApprovable) continue;
         if (employeeFilter && String(req[SITE_REQUEST_COL.EMPLOYEE_ID]) !== employeeFilter) continue;
 
         siteData.push({
           id: String(req[SITE_REQUEST_COL.ID]),
-          name: req[SITE_REQUEST_COL.SUGGESTED_NAME],
+          name: (isAutoApprovable ? "[موافقة تلقائية] " : "") + req[SITE_REQUEST_COL.SUGGESTED_NAME],
           latitude: parseFloat(req[SITE_REQUEST_COL.LATITUDE]),
           longitude: parseFloat(req[SITE_REQUEST_COL.LONGITUDE]),
-          radius: toNumberSafe(req[SITE_REQUEST_COL.TEMP_RADIUS], 100),
-          transportPrice: toNumberSafe(req[SITE_REQUEST_COL.TRANSPORT_PRICE], 0),
+          radius: isAutoApprovable ? AUTO_APPROVAL_MAX_DISTANCE_METERS : toNumberSafe(req[SITE_REQUEST_COL.TEMP_RADIUS], 100),
+          transportPrice: toNumberSafe(req[SITE_REQUEST_COL.TRANSPORT_PRICE], 120),
           isTemporary: true,
           temporaryForEmployeeId: String(req[SITE_REQUEST_COL.EMPLOYEE_ID]),
           approvedAt: req[SITE_REQUEST_COL.APPROVED_AT] || "",
-          approvalMode: "today"
+          approvalMode: isAutoApprovable ? "auto" : "today"
         });
       }
 
@@ -1243,7 +1259,7 @@ function doPost(e) {
         mapLongitude,
         ""
       ]);
-      var submitMessage = "Site request submitted successfully. If HR does not respond within 2 minutes, a temporary one-day approval may activate after distance checks.";
+      var submitMessage = "تم إرسال طلب تسجيل الموقع بنجاح للمراجعة. في حال عدم الرد من الإدارة خلال دقيقتين، سيتم تفعيل موافقة تلقائية مؤقتة طالما كنت متواجداً في نفس المكان.";
       return json({ success: true, message: submitMessage, attachmentSaved: false });
     }
 
@@ -1357,10 +1373,11 @@ function doPost(e) {
       if (dayOfWeek === 5 || dayOfWeek === 6) {
         manualStatus = "overtime";
       } else {
-        var parts = workStart.split(':');
-        var lateLimit = new Date(checkInDate);
-        lateLimit.setHours(parseInt(parts[0]), parseInt(parts[1] || 0), 0, 0);
-        manualStatus = (checkInDate > lateLimit) ? "late" : "present";
+        // 🚀 LATE CALCULATION FIX:
+        // Use string comparison (HH:mm) in the same timezone (Script Timezone) 
+        // to avoid offset issues with Date objects.
+        var checkInTimeStr = Utilities.formatDate(checkInDate, Session.getScriptTimeZone(), "HH:mm");
+        manualStatus = (checkInTimeStr > workStart) ? "late" : "present";
       }
       var transportContext = buildTransportContext();
       var attendanceTransport = resolveTransportPrice(site.transportPrice, data.employeeId, site.id, transportContext);
