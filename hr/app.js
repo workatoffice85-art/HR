@@ -1189,7 +1189,9 @@ function renderSiteRequestsTable(data) {
             statusColor = 'var(--danger)';
         }
 
-        const actions = req.status === 'pending' ? `
+        const canOverrideAutoApprovedToday = req.status === 'approved_today' && req.isAutoApproved && req.isActiveToday;
+        const canManageRequest = req.status === 'pending' || canOverrideAutoApprovedToday;
+        const actions = canManageRequest ? `
             <div style="display:flex; gap:8px;">
                 <button class="btn-primary" style="padding:5px 12px; font-size:0.85rem; width:auto; background:var(--secondary);" onclick="approveRequest('${req.id}', '${req.suggestedName}')">موافقة ✓</button>
                 <button class="btn-danger" style="padding:5px 12px; font-size:0.85rem; width:auto;" onclick="rejectRequest('${req.id}')">رفض ✕</button>
@@ -1226,10 +1228,14 @@ function renderSiteRequestsTable(data) {
     });
 }
 async function approveRequest(id, suggestedName) {
+    const matchedRequest = allSiteRequests.find(req => String(req.id) === String(id));
+    const currentTransportPrice = matchedRequest ? parseFloat(matchedRequest.transportPrice) : NaN;
+    const currentRadius = matchedRequest ? parseFloat(matchedRequest.tempRadius) : NaN;
+
     document.getElementById('approveReqId').value = id;
     document.getElementById('approveSiteName').value = suggestedName;
-    document.getElementById('approveTransportPrice').value = 120;
-    document.getElementById('approveRadius').value = 100;
+    document.getElementById('approveTransportPrice').value = Number.isFinite(currentTransportPrice) ? currentTransportPrice : 120;
+    document.getElementById('approveRadius').value = Number.isFinite(currentRadius) ? currentRadius : 100;
     document.getElementById('approveRequestModal').classList.remove('hidden');
 }
 
@@ -1261,8 +1267,7 @@ async function confirmApproval(mode) {
         if(result.success) {
             alert(result.message);
             closeApproveModal();
-            fetchSiteRequests();
-            fetchSites();
+            await Promise.all([fetchSiteRequests(true), fetchSites(true)]);
         } else alert("خطأ: " + result.message);
     } catch(e) { console.error(e); alert("خطأ في الاتصال"); }
     document.getElementById('loader').classList.add('hidden');
@@ -1281,7 +1286,7 @@ async function rejectRequest(id) {
         const result = await res.json();
         if(result.success) {
             alert(result.message);
-            fetchSiteRequests();
+            await fetchSiteRequests(true);
         } else alert("خطأ: " + result.message);
     } catch(e) { console.error(e); alert("خطأ في الاتصال"); }
     document.getElementById('loader').classList.add('hidden');
@@ -1305,4 +1310,3 @@ async function clearProcessedRequests() {
     } catch(e) { console.error(e); alert("خطأ في الاتصال"); }
     document.getElementById('loader').classList.add('hidden');
 }
-
