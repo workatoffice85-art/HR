@@ -553,13 +553,7 @@ function isRequestSiteId(siteId) {
   return /^REQ/i.test(String(siteId || ""));
 }
 
-  var siteTransport = context && context.siteMap
-    ? toNumberSafe(context.siteMap[normalizedSiteId], null)
-    : null;
-  if (siteTransport !== null) return siteTransport;
 
-  return 0;
-}
 
 function resolveTransportPrice(rawTransport, employeeId, siteId, context) {
   var normalizedSiteId = String(siteId || "");
