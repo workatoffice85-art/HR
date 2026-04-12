@@ -1,12 +1,15 @@
 const API_URL = 'https://script.google.com/macros/s/AKfycbwNhaRKDP-7M4dXSQend8RbYPkXRgs5nzN0-BmNzxEO8IkBN9lt6KDtJCdOqpovhJEY1Q/exec';
 let hrSession = null;
 let allAttendanceData = [];
-let allEmployees = []; // Added here
-let allSites = [];    // Added here
+let allEmployees = [];
+let allSites = [];
+let allSiteRequests = [];
+let appSettings = {};
 let hoursChartInstance = null;
 let latesChartInstance = null;
 let parseMapLinkTimer = null;
 let parseMapLinkRequestId = 0;
+let isInitialDataLoaded = false;
 
 document.addEventListener('DOMContentLoaded', () => {
     // Set default dates
@@ -107,11 +110,46 @@ function showTab(tabName) {
     }
 }
 
-async function initDashboard() {
-    fetchAttendance();
+async function initDashboard(forceRefresh = false) {
+    if (isInitialDataLoaded && !forceRefresh) return;
+    
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const res = await fetch(`${API_URL}?action=getDashboardData`);
+        const result = await res.json();
+        
+        if (result.success) {
+            allAttendanceData = result.attendance || [];
+            allEmployees = result.employees || [];
+            allSites = result.sites || [];
+            allSiteRequests = result.siteRequests || [];
+            appSettings = result.settings || {};
+            
+            isInitialDataLoaded = true;
+            
+            // Render the current active tab
+            const activeTab = localStorage.getItem('hrActiveTab') || 'attendance';
+            renderActiveTab(activeTab);
+        }
+    } catch (e) {
+        console.error("Initial load failed", e);
+    }
+    document.getElementById('loader').classList.add('hidden');
 }
 
-async function fetchAttendance() {
+function renderActiveTab(tabName) {
+    if (tabName === 'attendance') renderAttendanceTable(allAttendanceData);
+    if (tabName === 'employees') renderEmployeesTable(allEmployees);
+    if (tabName === 'sites') renderSitesTable(allSites);
+    if (tabName === 'siteRequests') renderRequestsTable(allSiteRequests);
+    if (tabName === 'settings') renderSettings(appSettings);
+}
+
+async function fetchAttendance(force = false) {
+    if (!force && allAttendanceData.length) {
+        renderAttendanceTable(allAttendanceData);
+        return;
+    }
     document.getElementById('loader').classList.remove('hidden');
     try {
         const res = await fetch(`${API_URL}?action=getAttendance`);
@@ -122,6 +160,10 @@ async function fetchAttendance() {
         }
     } catch(e) { console.error(e); }
     document.getElementById('loader').classList.add('hidden');
+}
+
+async function refreshData() {
+    await initDashboard(true);
 }
 
 function renderAttendanceTable(data) {
@@ -613,76 +655,87 @@ function updateCharts(labels, hoursData, latesData) {
     });
 }
 
-async function fetchEmployees() {
+async function fetchEmployees(force = false) {
+    if (!force && allEmployees.length) {
+        renderEmployeesTable(allEmployees);
+        return;
+    }
     document.getElementById('loader').classList.remove('hidden');
     try {
         const res = await fetch(`${API_URL}?action=getEmployees`);
         const result = await res.json();
         if(result.success) {
-            allEmployees = result.data; // Store for editing
+            allEmployees = result.data;
             populateEmployeeDetailEmployees();
-            const tbody = document.getElementById('employeesTableBody');
-            tbody.innerHTML = '';
-            result.data.forEach(record => {
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td data-label="الاسم">${record.name}</td>
-                    <td data-label="البريد">${record.email}</td>
-                    <td data-label="الهاتف">${record.phone || '-'}</td>
-                    <td data-label="الصلاحية">${record.role}</td>
-                    <td data-label="البصمة">${record.faceDescriptor ? '✅ مسجل' : '❌ لا يوجد'}</td>
-                    <td data-label="الإجراءات" style="display:flex; gap:8px; justify-content:center; padding:10px;">
-                        <button class="btn-primary" style="padding:5px 12px; font-size:0.85rem; width:auto;" onclick="editEmployee('${record.id}')">تعديل ✏️</button>
-                        <button class="btn-danger" style="padding:5px 12px; font-size:0.85rem; width:auto; background:rgba(239,68,68,0.1); border:1px solid var(--danger); color:var(--danger);" onclick="deleteEntity('deleteEmployee', '${record.id}', '${record.name}')">حذف 🗑️</button>
-                    </td>
-                `;
-                tbody.appendChild(row);
-            });
+            renderEmployeesTable(allEmployees);
         }
     } catch(e) { console.error(e); }
     document.getElementById('loader').classList.add('hidden');
 }
 
-async function fetchSites() {
-    console.log("Fetching sites...");
+function renderEmployeesTable(data) {
+    const tbody = document.getElementById('employeesTableBody');
+    tbody.innerHTML = '';
+    data.forEach(record => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td data-label="الاسم">${record.name}</td>
+            <td data-label="البريد">${record.email}</td>
+            <td data-label="الهاتف">${record.phone || '-'}</td>
+            <td data-label="الصلاحية">${record.role}</td>
+            <td data-label="البصمة">${record.faceDescriptor ? '✅ مسجل' : '❌ لا يوجد'}</td>
+            <td data-label="الإجراءات" style="display:flex; gap:8px; justify-content:center; padding:10px;">
+                <button class="btn-primary" style="padding:5px 12px; font-size:0.85rem; width:auto;" onclick="editEmployee('${record.id}')">تعديل ✏️</button>
+                <button class="btn-danger" style="padding:5px 12px; font-size:0.85rem; width:auto; background:rgba(239,68,68,0.1); border:1px solid var(--danger); color:var(--danger);" onclick="deleteEntity('deleteEmployee', '${record.id}', '${record.name}')">حذف 🗑️</button>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+async function fetchSites(force = false) {
+    if (!force && allSites.length) {
+        renderSitesTable(allSites);
+        return;
+    }
     document.getElementById('loader').classList.remove('hidden');
     try {
         const res = await fetch(`${API_URL}?action=getSites`);
         const result = await res.json();
-        console.log("Sites result:", result);
         if(result.success) {
             allSites = result.data;
-            const tbody = document.getElementById('sitesTableBody');
-            tbody.innerHTML = '';
-            result.data.forEach(record => {
-                console.log("Rendering site record:", record);
-                const isTemporary = Boolean(record.isTemporary);
-                const siteName = isTemporary
-                    ? `${record.name} <small style="color:#f59e0b;">(مؤقت - اليوم فقط)</small>`
-                    : record.name;
-                const actions = isTemporary
-                    ? '<span style="color:var(--text-muted);">-</span>'
-                    : `
-                        <button class="btn-primary" style="padding:5px 12px; font-size:0.85rem; width:auto;" onclick="editSite('${record.id}')">تعديل ✏️</button>
-                        <button class="btn-danger" style="padding:5px 12px; font-size:0.85rem; width:auto; background:rgba(239,68,68,0.1); border:1px solid var(--danger); color:var(--danger);" onclick="deleteEntity('deleteSite', '${record.id}', '${record.name}')">حذف 🗑️</button>
-                    `;
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td data-label="اسم الموقع">${siteName}</td>
-                    <td data-label="خط العرض">${record.latitude}</td>
-                    <td data-label="خط الطول">${record.longitude}</td>
-                    <td data-label="النطاق">${record.radius} متر</td>
-                    <td data-label="الإجراءات" style="display:flex; gap:8px; justify-content:center; padding:10px;">
-                        ${actions}
-                    </td>
-                `;
-                tbody.appendChild(row);
-            });
+            renderSitesTable(allSites);
         }
-    } catch(e) { 
-        console.error("Fetch Sites Error:", e);
-    }
+    } catch(e) { console.error("Fetch Sites Error:", e); }
     document.getElementById('loader').classList.add('hidden');
+}
+
+function renderSitesTable(data) {
+    const tbody = document.getElementById('sitesTableBody');
+    tbody.innerHTML = '';
+    data.forEach(record => {
+        const isTemporary = Boolean(record.isTemporary);
+        const siteName = isTemporary
+            ? `${record.name} <small style="color:#f59e0b;">(مؤقت - اليوم فقط)</small>`
+            : record.name;
+        const actions = isTemporary
+            ? '<span style="color:var(--text-muted);">-</span>'
+            : `
+                <button class="btn-primary" style="padding:5px 12px; font-size:0.85rem; width:auto;" onclick="editSite('${record.id}')">تعديل ✏️</button>
+                <button class="btn-danger" style="padding:5px 12px; font-size:0.85rem; width:auto; background:rgba(239,68,68,0.1); border:1px solid var(--danger); color:var(--danger);" onclick="deleteEntity('deleteSite', '${record.id}', '${record.name}')">حذف 🗑️</button>
+            `;
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td data-label="اسم الموقع">${siteName}</td>
+            <td data-label="خط العرض">${record.latitude}</td>
+            <td data-label="خط الطول">${record.longitude}</td>
+            <td data-label="النطاق">${record.radius} متر</td>
+            <td data-label="الإجراءات" style="display:flex; gap:8px; justify-content:center; padding:10px;">
+                ${actions}
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
 }
 
 async function editEmployee(id) {
@@ -1009,32 +1062,39 @@ function toggleSidebar() {
     overlay.classList.toggle('show');
 }
 
-async function fetchSettings() {
+async function fetchSettings(force = false) {
+    if (!force && Object.keys(appSettings).length) {
+        renderSettings(appSettings);
+        return;
+    }
     document.getElementById('loader').classList.remove('hidden');
     try {
         const res = await fetch(`${API_URL}?action=getSettings`);
         const result = await res.json();
         if (result.success) {
-            // Ensure time values are in HH:mm format for input[type="time"]
-            let start = result.data.workStartTime || "09:00";
-            let end = result.data.workEndTime || "17:00";
-            
-            // Basic normalization just in case
-            if (start.match(/^\d:\d\d$/)) start = "0" + start;
-            if (end.match(/^\d:\d\d$/)) end = "0" + end;
-
-            document.getElementById('setWorkStartTime').value = start;
-            document.getElementById('setWorkEndTime').value = end;
-            
-            // Reports settings
-            document.getElementById('setReportEmails').value = result.data.reportEmails || "";
-            document.getElementById('setDailyReport').checked = result.data.dailyReportEnabled === "true";
-            document.getElementById('setMonthlyReport').checked = result.data.monthlyReportEnabled === "true";
+            appSettings = result.data;
+            renderSettings(appSettings);
         }
-    } catch (e) {
-        console.error("Fetch Settings error", e);
-    }
+    } catch (e) { console.error("Fetch Settings error", e); }
     document.getElementById('loader').classList.add('hidden');
+}
+
+function renderSettings(data) {
+    // Ensure time values are in HH:mm format for input[type="time"]
+    let start = data.workStartTime || "09:00";
+    let end = data.workEndTime || "17:00";
+    
+    // Basic normalization just in case
+    if (start.match(/^\d:\d\d$/)) start = "0" + start;
+    if (end.match(/^\d:\d\d$/)) end = "0" + end;
+
+    document.getElementById('setWorkStartTime').value = start;
+    document.getElementById('setWorkEndTime').value = end;
+    
+    // Reports settings
+    document.getElementById('setReportEmails').value = data.reportEmails || "";
+    document.getElementById('setDailyReport').checked = data.dailyReportEnabled === "true";
+    document.getElementById('setMonthlyReport').checked = data.monthlyReportEnabled === "true";
 }
 
 async function saveSettings() {
@@ -1092,13 +1152,18 @@ async function setupTriggers() {
 }
 
 // ------ SITE REQUESTS LOGIC ------ //
-async function fetchSiteRequests() {
+async function fetchSiteRequests(force = false) {
+    if (!force && allSiteRequests.length) {
+        renderSiteRequestsTable(allSiteRequests);
+        return;
+    }
     document.getElementById('loader').classList.remove('hidden');
     try {
         const res = await fetch(`${API_URL}?action=getSiteRequests`);
         const result = await res.json();
         if(result.success) {
-            renderSiteRequestsTable(result.data);
+            allSiteRequests = result.data;
+            renderSiteRequestsTable(allSiteRequests);
         }
     } catch(e) { console.error("Fetch Site Requests error:", e); }
     document.getElementById('loader').classList.add('hidden');

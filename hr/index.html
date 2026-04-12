@@ -84,7 +84,7 @@
                     <div style="display:flex; gap:10px; align-items:center;">
                         <label>تاريخ اليوم:</label>
                         <input type="date" id="attendanceDateFilter" onchange="renderAttendanceTable(allAttendanceData)">
-                        <button class="btn-primary" style="width:auto;" onclick="fetchAttendance()">تحديث 🔄</button>
+                        <button class="btn-primary" style="width:auto;" onclick="refreshData()">تحديث مجمع 🔄</button>
                     </div>
                 </div>
                 <div class="table-container">
@@ -226,7 +226,10 @@
             <div id="tab-employees" class="tab-content hidden">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
                     <h2>قائمة الموظفين</h2>
-                    <button class="btn-primary" style="width:auto; background:var(--secondary);" onclick="openEmployeeModal()">+ إضافة موظف</button>
+                    <div style="display:flex; gap:10px;">
+                        <button class="btn-primary" style="width:auto; padding:8px 15px;" onclick="refreshData()">تحديث مجمع 🔄</button>
+                        <button class="btn-primary" style="width:auto; background:var(--secondary);" onclick="openEmployeeModal()">+ إضافة موظف</button>
+                    </div>
                 </div>
                 <div class="table-container">
                     <table>
@@ -249,7 +252,10 @@
             <div id="tab-sites" class="tab-content hidden">
                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
                     <h2>مواقع العمل</h2>
-                    <button class="btn-primary" style="width:auto; background:var(--secondary);" onclick="openSiteModal()">+ إضافة موقع (سجل بشيت جوجل)</button>
+                    <div style="display:flex; gap:10px;">
+                        <button class="btn-primary" style="width:auto; padding:8px 15px;" onclick="refreshData()">تحديث مجمع 🔄</button>
+                        <button class="btn-primary" style="width:auto; background:var(--secondary);" onclick="openSiteModal()">+ إضافة موقع (سجل بشيت جوجل)</button>
+                    </div>
                 </div>
                 <div class="table-container">
                     <table>
@@ -269,9 +275,9 @@
 
             <!-- Site Requests Tab -->
             <div id="tab-siteRequests" class="tab-content hidden">
-                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
                     <h2>طلبات تسجيل المواقع الجديدة</h2>
-                    <button class="btn-primary" style="width:auto;" onclick="fetchSiteRequests()">تحديث</button>
+                    <button class="btn-primary" style="width:auto; padding:8px 15px;" onclick="refreshData()">تحديث مجمع 🔄</button>
                 </div>
                 <div class="table-container">
                     <table>

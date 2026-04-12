@@ -192,27 +192,32 @@ function logout() {
 async function initSystem() {
     setStatus('🔄 جاري بدء النظام (النسخة المحدثة)...', 'text-muted');
     
-    // Step 1: Load Sites
+    // Step 1: Load Data & AI Models in Parallel
     try {
-        const response = await fetch(`${API_URL}?action=getSites&employeeId=${encodeURIComponent(currentUser.id)}`);
-        const result = await response.json();
-        if (result.success) {
-            sitesData = result.data;
-            setStatus(`📡 تم تحميل ${sitesData.length} موقع. جاري تحميل الذكاء الاصطناعي...`, 'text-muted');
+        const dataPromise = fetch(`${API_URL}?action=getPortalInitialData&employeeId=${encodeURIComponent(currentUser.id)}`).then(r => r.json());
+        const modelPromise = Promise.all([
+            faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
+            faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+            faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+        ]);
+
+        const [dataResult, _] = await Promise.all([dataPromise, modelPromise]);
+
+        if (dataResult.success) {
+            sitesData = dataResult.sites || [];
+            allAttendanceData = dataResult.attendance || [];
+            
+            // Process initial status
+            processAttendanceStatus(allAttendanceData);
+            
+            setStatus(`📡 تم تحميل ${sitesData.length} موقع. النظام جاهز...`, 'text-muted');
         } else {
-            setStatus('⚠️ فشل في تحميل المواقع من السيرفر', 'error-text');
+            console.error("Data load failed", dataResult);
+            setStatus('⚠️ فشل في تحميل البيانات من السيرفر', 'error-text');
         }
     } catch(e) {
-        setStatus('❌ خطأ في الاتصال بالسيرفر', 'error-text');
-    }
-
-    // Step 2: Load Face Models
-    try {
-        await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
-        await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-        await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
-    } catch(e) {
-        setStatus('❌ مشكلة في تحميل ملفات الذكاء الاصطناعي من السيرفر', 'error-text');
+        console.error("Initial load error", e);
+        setStatus('❌ خطأ في الاتصال أو تحميل ملفات الذكاء الاصطناعي', 'error-text');
         return;
     }
 
@@ -232,7 +237,24 @@ async function initSystem() {
 
     startVideo();
     getLocation();
-    checkCurrentStatus(); // Initial status check after login
+}
+
+function processAttendanceStatus(data) {
+    if (data && data.length > 0) {
+        const lastRecord = data[data.length - 1];
+        const isCheckedIn = (lastRecord.checkIn && !lastRecord.checkOut);
+        
+        const checkInDate = new Date(lastRecord.checkIn).toDateString();
+        const today = new Date().toDateString();
+
+        if (isCheckedIn && checkInDate === today) {
+            setAppState('in', lastRecord.checkIn);
+        } else {
+            setAppState('out');
+        }
+    } else {
+        setAppState('out');
+    }
 }
 
 async function checkCurrentStatus() {
